@@ -1,4 +1,4 @@
-'use effect'
+'use client'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Send,
@@ -9,23 +9,26 @@ import {
   MoreVertical,
   Phone,
   Users,
-  Hash,
   Search,
   Settings,
+  Plus,
+  Circle,
 } from 'lucide-react'
 
 // Main Chat Interface Component
 export default function ChatInterface() {
-  const [channels, setChannels] = useState([])
-  const [activeChannel, setActiveChannel] = useState(null)
+  const [workspaceMembers, setWorkspaceMembers] = useState([])
+  const [activeConversation, setActiveConversation] = useState(null)
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [typingUsers, setTypingUsers] = useState([])
   const [ws, setWs] = useState(null)
   const [user, setUser] = useState(null)
+  const [onlineUsers, setOnlineUsers] = useState(new Set())
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -38,10 +41,10 @@ export default function ChatInterface() {
 
       setUser(session.user)
 
-      // Load channels
-      const channelsResponse = await fetch('/api/chat/channels')
-      const channelsData = await channelsResponse.json()
-      setChannels(channelsData.channels || [])
+      // Load workspace members
+      const membersResponse = await fetch('/api/workspace/members')
+      const membersData = await membersResponse.json()
+      setWorkspaceMembers(membersData.members || [])
 
       // Connect WebSocket
       const wsUrl = `ws://localhost:3000/api/chat/ws?token=${session.accessToken}`
@@ -77,7 +80,8 @@ export default function ChatInterface() {
 
       switch (type) {
         case 'new_message':
-          if (data.channelId === activeChannel?.id) {
+          // Only show if it's from current conversation
+          if (isMessageFromActiveConversation(data)) {
             setMessages(prev => [...prev, data])
             scrollToBottom()
           }
@@ -92,7 +96,7 @@ export default function ChatInterface() {
           break
 
         case 'typing_indicator':
-          if (data.channelId === activeChannel?.id && data.userId !== user?.id) {
+          if (data.userId === activeConversation?.id && data.userId !== user?.id) {
             if (data.isTyping) {
               setTypingUsers(prev => [...prev.filter(id => id !== data.userId), data.userId])
             } else {
@@ -100,29 +104,42 @@ export default function ChatInterface() {
             }
           }
           break
+
+        case 'user_online':
+          setOnlineUsers(prev => new Set([...prev, data.userId]))
+          break
+
+        case 'user_offline':
+          setOnlineUsers(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(data.userId)
+            return newSet
+          })
+          break
       }
     },
-    [activeChannel, user]
+    [activeConversation, user]
   )
 
-  // Load messages for active channel
+  const isMessageFromActiveConversation = message => {
+    if (!activeConversation) return false
+
+    return (
+      (message.senderId === user?.id && message.receiverId === activeConversation.id) ||
+      (message.senderId === activeConversation.id && message.receiverId === user?.id)
+    )
+  }
+
+  // Load messages for active conversation
   useEffect(() => {
-    if (activeChannel && ws) {
-      loadMessages(activeChannel.id)
-
-      // Subscribe to channel
-      ws.send(
-        JSON.stringify({
-          type: 'subscribe_channel',
-          payload: { channelId: activeChannel.id },
-        })
-      )
+    if (activeConversation && ws) {
+      loadMessages(activeConversation.id)
     }
-  }, [activeChannel, ws])
+  }, [activeConversation, ws])
 
-  const loadMessages = async channelId => {
+  const loadMessages = async otherUserId => {
     try {
-      const response = await fetch(`/api/chat/messages?channelId=${channelId}&limit=50`)
+      const response = await fetch(`/api/chat/messages?receiverId=${otherUserId}&limit=50`)
       const data = await response.json()
       setMessages(data.messages || [])
       scrollToBottom()
@@ -136,14 +153,14 @@ export default function ChatInterface() {
   }
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !activeChannel) return
+    if (!newMessage.trim() || !activeConversation) return
 
     try {
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          channelId: activeChannel.id,
+          receiverId: activeConversation.id,
           content: newMessage,
           type: 'TEXT',
         }),
@@ -166,31 +183,31 @@ export default function ChatInterface() {
   }
 
   const startTyping = () => {
-    if (!isTyping && ws && activeChannel) {
+    if (!isTyping && ws && activeConversation) {
       setIsTyping(true)
       ws.send(
         JSON.stringify({
           type: 'typing_start',
-          payload: { channelId: activeChannel.id },
+          payload: { receiverId: activeConversation.id },
         })
       )
     }
   }
 
   const stopTyping = useCallback(() => {
-    if (isTyping && ws && activeChannel) {
+    if (isTyping && ws && activeConversation) {
       setIsTyping(false)
       ws.send(
         JSON.stringify({
           type: 'typing_stop',
-          payload: { channelId: activeChannel.id },
+          payload: { receiverId: activeConversation.id },
         })
       )
     }
-  }, [isTyping, ws, activeChannel])
+  }, [isTyping, ws, activeConversation])
 
   const handleFileUpload = async file => {
-    if (!file || !activeChannel) return
+    if (!file || !activeConversation) return
 
     try {
       // Get presigned URL
@@ -218,7 +235,7 @@ export default function ChatInterface() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          channelId: activeChannel.id,
+          receiverId: activeConversation.id,
           content: `Shared ${file.name}`,
           type: file.type.startsWith('image/') ? 'IMAGE' : 'FILE',
           fileUrl: uploadData.fileUrl,
@@ -234,15 +251,15 @@ export default function ChatInterface() {
   }
 
   const createZoomMeeting = async () => {
-    if (!activeChannel) return
+    if (!activeConversation) return
 
     try {
       const response = await fetch('/api/chat/zoom/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: `${activeChannel.name} Chat`,
-          channelId: activeChannel.id,
+          topic: `Chat with ${activeConversation.firstName} ${activeConversation.lastName}`,
+          participants: [activeConversation.id],
         }),
       })
 
@@ -253,7 +270,7 @@ export default function ChatInterface() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          channelId: activeChannel.id,
+          receiverId: activeConversation.id,
           content: zoomData.message.content,
           type: 'ZOOM_LINK',
           metadata: zoomData.message.metadata,
@@ -264,55 +281,115 @@ export default function ChatInterface() {
     }
   }
 
+  const filteredMembers = workspaceMembers.filter(
+    member =>
+      member.user.id !== user?.id && // Exclude current user
+      (member.user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        member.user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        member.user.email.toLowerCase().includes(searchQuery.toLowerCase()))
+  )
+
+  const getLastMessage = memberId => {
+    // This would typically come from a separate API call for conversation previews
+    return 'Click to start chatting...'
+  }
+
+  const isOnline = userId => onlineUsers.has(userId)
+
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Sidebar - Channels */}
+      {/* Sidebar - Workspace Members */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Channels</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Messages</h2>
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search people..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {channels.map(channel => (
+          {filteredMembers.map(member => (
             <div
-              key={channel.id}
-              onClick={() => setActiveChannel(channel)}
-              className={`p-3 cursor-pointer hover:bg-gray-50 ${
-                activeChannel?.id === channel.id ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+              key={member.user.id}
+              onClick={() => setActiveConversation(member.user)}
+              className={`p-4 cursor-pointer hover:bg-gray-50 border-b border-gray-100 ${
+                activeConversation?.id === member.user.id
+                  ? 'bg-blue-50 border-r-2 border-blue-500'
+                  : ''
               }`}
             >
               <div className="flex items-center space-x-3">
-                <Hash className="w-5 h-5 text-gray-400" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{channel.name}</p>
-                  {channel.description && (
-                    <p className="text-xs text-gray-500 truncate">{channel.description}</p>
+                <div className="relative">
+                  <img
+                    src={member.user.avatar || '/default-avatar.png'}
+                    alt={`${member.user.firstName} ${member.user.lastName}`}
+                    className="w-12 h-12 rounded-full"
+                  />
+                  {isOnline(member.user.id) && (
+                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
                   )}
                 </div>
-                <div className="flex items-center space-x-1">
-                  <Users className="w-4 h-4 text-gray-400" />
-                  <span className="text-xs text-gray-500">{channel.members?.length || 0}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {member.user.firstName} {member.user.lastName}
+                    </p>
+                    <span className="text-xs text-gray-500">
+                      {isOnline(member.user.id) ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 truncate">
+                    {member.user.jobTitle || member.role.name}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate mt-1">
+                    {getLastMessage(member.user.id)}
+                  </p>
                 </div>
               </div>
             </div>
           ))}
+
+          {filteredMembers.length === 0 && (
+            <div className="p-8 text-center text-gray-500">
+              <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p>No workspace members found</p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
-        {activeChannel ? (
+        {activeConversation ? (
           <>
             {/* Chat Header */}
             <div className="bg-white border-b border-gray-200 p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <Hash className="w-6 h-6 text-gray-400" />
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{activeChannel.name}</h3>
-                    {activeChannel.description && (
-                      <p className="text-sm text-gray-500">{activeChannel.description}</p>
+                  <div className="relative">
+                    <img
+                      src={activeConversation.avatar || '/default-avatar.png'}
+                      alt={`${activeConversation.firstName} ${activeConversation.lastName}`}
+                      className="w-10 h-10 rounded-full"
+                    />
+                    {isOnline(activeConversation.id) && (
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
                     )}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {activeConversation.firstName} {activeConversation.lastName}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {isOnline(activeConversation.id) ? 'Active now' : 'Offline'}
+                    </p>
                   </div>
                 </div>
 
@@ -320,12 +397,12 @@ export default function ChatInterface() {
                   <button
                     onClick={createZoomMeeting}
                     className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                    title="Start Zoom call"
+                    title="Start video call"
                   >
                     <Video className="w-5 h-5" />
                   </button>
                   <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
-                    <Search className="w-5 h-5" />
+                    <Phone className="w-5 h-5" />
                   </button>
                   <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
                     <MoreVertical className="w-5 h-5" />
@@ -336,16 +413,35 @@ export default function ChatInterface() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map(message => (
-                <MessageComponent key={message.id} message={message} />
+              {messages.map((message, index) => (
+                <MessageComponent
+                  key={message.id}
+                  message={message}
+                  isOwnMessage={message.senderId === user?.id}
+                  showAvatar={index === 0 || messages[index - 1]?.senderId !== message.senderId}
+                />
               ))}
 
               {/* Typing Indicators */}
               {typingUsers.length > 0 && (
-                <div className="text-sm text-gray-500 italic">
-                  {typingUsers.length === 1
-                    ? 'Someone is typing...'
-                    : `${typingUsers.length} people are typing...`}
+                <div className="flex items-center space-x-2">
+                  <img
+                    src={activeConversation.avatar || '/default-avatar.png'}
+                    alt="typing"
+                    className="w-6 h-6 rounded-full"
+                  />
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: '0.1s' }}
+                    ></div>
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: '0.2s' }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-gray-500">typing...</span>
                 </div>
               )}
 
@@ -372,7 +468,7 @@ export default function ChatInterface() {
                     }}
                     onKeyDown={handleKeyPress}
                     onBlur={stopTyping}
-                    placeholder={`Message #${activeChannel.name}`}
+                    placeholder={`Message ${activeConversation.firstName}...`}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows="1"
                   />
@@ -401,9 +497,14 @@ export default function ChatInterface() {
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <Hash className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Select a channel</h3>
-              <p className="text-gray-500">Choose a channel from the sidebar to start chatting</p>
+              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-medium text-gray-900 mb-2">Welcome to Chat</h3>
+              <p className="text-gray-500 mb-4">
+                Select a workspace member to start a conversation
+              </p>
+              <div className="text-sm text-gray-400">
+                💬 Send messages • 📎 Share files • 🎥 Video calls
+              </div>
             </div>
           </div>
         )}
@@ -413,12 +514,25 @@ export default function ChatInterface() {
 }
 
 // Message Component
-function MessageComponent({ message }) {
+function MessageComponent({ message, isOwnMessage, showAvatar }) {
   const formatTime = date => {
-    return new Date(date).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    const now = new Date()
+    const messageDate = new Date(date)
+    const diffInHours = (now - messageDate) / (1000 * 60 * 60)
+
+    if (diffInHours < 24) {
+      return messageDate.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    } else {
+      return messageDate.toLocaleDateString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    }
   }
 
   const renderMessageContent = () => {
@@ -437,7 +551,7 @@ function MessageComponent({ message }) {
 
       case 'FILE':
         return (
-          <div className="mt-2 p-3 bg-gray-50 rounded-lg border">
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg border max-w-sm">
             <div className="flex items-center space-x-3">
               <Paperclip className="w-5 h-5 text-gray-400" />
               <div className="flex-1 min-w-0">
@@ -460,74 +574,56 @@ function MessageComponent({ message }) {
 
       case 'ZOOM_LINK':
         return (
-          <div className="mt-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mt-2 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-sm">
             <div className="flex items-center space-x-3">
               <Video className="w-6 h-6 text-blue-500" />
               <div className="flex-1">
                 <p className="font-medium text-blue-900">{message.metadata?.topic}</p>
-                <p className="text-sm text-blue-700">Zoom meeting ready to join</p>
+                <p className="text-sm text-blue-700">Video call invitation</p>
               </div>
-              <button
-                onClick={() => window.open(message.metadata?.joinUrl, '_blank')}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-              >
-                Join
-              </button>
             </div>
-          </div>
-        )
-
-      case 'RESOURCE_SHARE':
-        return (
-          <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-center space-x-3">
-              <Paperclip className="w-5 h-5 text-green-500" />
-              <div className="flex-1">
-                <p className="font-medium text-green-900">{message.metadata?.resourceTitle}</p>
-                <p className="text-sm text-green-700">{message.metadata?.resourceType}</p>
-              </div>
-              <button
-                onClick={() => window.open(message.metadata?.resourceUrl, '_blank')}
-                className="text-green-600 hover:text-green-800 text-sm font-medium"
-              >
-                View
-              </button>
-            </div>
+            <button
+              onClick={() => window.open(message.metadata?.joinUrl, '_blank')}
+              className="mt-3 w-full bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            >
+              Join Call
+            </button>
           </div>
         )
 
       default:
-        return <p className="text-gray-900 whitespace-pre-wrap">{message.content}</p>
+        return (
+          <div
+            className={`inline-block px-4 py-2 rounded-2xl max-w-xs lg:max-w-md ${
+              isOwnMessage ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'
+            }`}
+          >
+            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          </div>
+        )
     }
   }
 
   return (
-    <div className="flex space-x-3">
-      <img
-        src={message.sender.avatar || '/default-avatar.png'}
-        alt={`${message.sender.firstName} ${message.sender.lastName}`}
-        className="w-8 h-8 rounded-full"
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-gray-900">
-            {message.sender.firstName} {message.sender.lastName}
-          </span>
-          <span className="text-xs text-gray-500">{formatTime(message.createdAt)}</span>
-          {message.isEdited && <span className="text-xs text-gray-400">(edited)</span>}
-        </div>
-        {renderMessageContent()}
-
-        {/* Reactions */}
-        {message.reactions && message.reactions.length > 0 && (
-          <div className="flex space-x-1 mt-1">
-            {message.reactions.map(reaction => (
-              <span key={reaction.id} className="text-sm bg-gray-100 px-2 py-1 rounded-full">
-                {reaction.emoji}
-              </span>
-            ))}
-          </div>
+    <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`flex space-x-2 max-w-xl ${isOwnMessage ? 'flex-row-reverse space-x-reverse' : ''}`}
+      >
+        {showAvatar && !isOwnMessage && (
+          <img
+            src={message.sender.avatar || '/default-avatar.png'}
+            alt={`${message.sender.firstName} ${message.sender.lastName}`}
+            className="w-8 h-8 rounded-full"
+          />
         )}
+
+        <div className={`${showAvatar ? '' : 'ml-10'} ${isOwnMessage ? 'mr-10' : ''}`}>
+          {renderMessageContent()}
+          <p className={`text-xs text-gray-500 mt-1 ${isOwnMessage ? 'text-right' : 'text-left'}`}>
+            {formatTime(message.createdAt)}
+            {message.isEdited && <span className="ml-1">(edited)</span>}
+          </p>
+        </div>
       </div>
     </div>
   )

@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { getInitials } from '@/lib/utils'
+import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar'
 
 // Navigation items with their required permissions
 const navigationItems = [
@@ -225,11 +226,13 @@ export function DashboardNav() {
           <div className="space-y-3">
             {/* User Info */}
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={user.avatar} alt={`${user.firstName} ${user.lastName}`} />
+                <AvatarFallback className="text-white text-sm font-medium bg-primary">
                   {getInitials(`${user.firstName} ${user.lastName}`)}
-                </span>
-              </div>
+                </AvatarFallback>
+              </Avatar>
+
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-charcoal-800 truncate">
                   {user.firstName} {user.lastName}
