@@ -12,13 +12,7 @@ const LOGO_URL = 'https://mystarboard.ng/nigcomsat-logo.png'
 const WATERMARK_URL = 'https://mystarboard.ng/nigcomsat-logo.png'
 
 // Email configuration - Replace with your actual credentials
-const emailConfig = {
-  user: 'support@mystarboard.ng',
-  pass: '#Starboard2025',
-  from: 'support@mystarboard.ng',
-  host: 'mail.privateemail.com',
-  port: 587,
-}
+ 
 
 // Create log file with timestamp
 fs.writeFileSync(LOG_FILE, `Email Sending Log - ${new Date().toISOString()}\n\n`)
