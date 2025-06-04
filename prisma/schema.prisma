@@ -1,0 +1,959 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+///=== Activity logger===
+model Activity {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  level       String   // ERROR, WARN, INFO, DEBUG
+  type        String   // application_submitted, auth_login, workspace_created, etc.
+  title       String   // Human readable title
+  description String   // Detailed description
+  message     String   // Original log message
+  icon        String?  // Icon name for UI
+  color       String?  // Color for UI (red, green, blue, etc.)
+
+  // Relationships
+  userId      String?
+  user        User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  // Optional: Remove if you don't want to link activities to specific events
+  // eventId     String?
+  // calendarEvent Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  // For roles
+  roleId      String?
+  role        Role? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  messageId   String?
+  // message     Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  resourceId  String?
+  // resource    Resource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+
+  // Additional metadata as JSON
+  metadata    Json?
+
+  // Indexes for performance
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([timestamp])
+  @@index([type])
+  @@index([level])
+  @@map("activities")
+}
+
+// ===== CORE USER & WORKSPACE MODELS =====
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String?
+  firstName   String
+  lastName    String
+  avatar      String?
+  phone       String?
+  bio         String?
+  location    String?
+  address     String?
+  company     String?
+  jobTitle    String?
+  website     String?
+  linkedIn    String?
+  twitter     String?
+  isEmailVerified Boolean? @default(false)
+  profileData Json     @default("{}")
+  timezone    String?  @default("UTC")
+  language    String?  @default("en")
+  isActive    Boolean  @default(true)
+  isVerified  Boolean  @default(false)
+  lastLoginAt DateTime?
+  lastActiveAt DateTime?
+  isOnboardingCompleted Boolean @default(false)
+  onboardingCompletedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  passwordResetToken     String?   @unique
+  passwordResetExpiresAt DateTime?
+  emailVerificationToken String?  @unique
+  emailVerifiedAt        DateTime?
+  activities Activity[]
+
+  workspaceMembers     WorkspaceMember[]
+  createdWorkspaces    Workspace[]        @relation("WorkspaceCreator")
+  sentMessages         Message[]          @relation("MessageSender")
+  receivedMessages     Message[]          @relation("MessageReceiver")
+  sentInvitations      UserInvitation[]   @relation("SentInvitations")
+  createdApplications  Application[]
+  applications         ApplicationSubmission[]
+  reviewedApplications ApplicationSubmission[] @relation("ApplicationReviewer")
+  applicationComments  ApplicationComment[]
+  eventRegistrations   EventRegistration[]
+  createdEvents        Event[]            @relation("EventCreator")
+  notifications        Notification[]
+  createdResources     Resource[]         @relation("ResourceCreator")
+  resourceAccess       ResourceAccess[]
+  createdOnboardings   OnboardingFlow[]
+  onboardingProgress   OnboardingCompletion[]
+  createdTemplates     EmailTemplate[]
+
+  // eventSpeaking       EventSpeaker[]    @relation("EventSpeaker")
+  eventReminders      EventReminder[]
+  rescheduledEvents   EventReschedule[]
+  availability        UserAvailability[]
+  unavailability      UserUnavailability[]
+  waitlistEntries     EventWaitlist[]
+  recordingViews      RecordingView[]
+  invitedToEvents     EventRegistration[] @relation("EventInviter")
+  eventAccess         EventAccess[]
+
+  @@map("users")
+}
+
+model UserUnavailability {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String   // "Vacation", "Conference", etc.
+  startDate DateTime
+  endDate   DateTime
+  isAllDay  Boolean  @default(true)
+  reason    String?
+  isRecurring Boolean @default(false)
+  recurringRule Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_unavailability")
+}
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logo        String?
+  website     String?
+  isActive    Boolean  @default(true)
+  settings    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  creatorId   String
+
+  creator           User   @relation("WorkspaceCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  members           WorkspaceMember[]
+  roles             Role[]
+  applications      Application[]
+  events            Event[]
+  resources         Resource[]
+  messages          Message[]
+  notifications     Notification[]
+  userInvitations   UserInvitation[]
+  onboardingFlows   OnboardingFlow[]
+  emailTemplates    EmailTemplate[]
+  onboardingCompletions OnboardingCompletion[]
+    activities Activity[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  userId          String
+  roleId          String
+  isActive        Boolean  @default(true)
+  invitedBy       String?
+  invitedAt       DateTime?
+  onboardingRequired     Boolean  @default(false)
+  onboardingStartedAt    DateTime?
+  onboardingCompletedAt  DateTime?
+  settings        Json     @default("{}")
+  joinedAt        DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  role            Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+
+
+// ===== USER MANAGEMENT & INVITATION MODELS =====
+
+model UserInvitation {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  email           String
+  roleId          String
+  templateId      String?
+  token           String   @unique
+  isAccepted      Boolean  @default(false)
+  expiresAt       DateTime
+  sentAt          DateTime @default(now())
+  acceptedAt      DateTime?
+  variableData    Json     @default("{}")
+  personalMessage String?
+  createdBy       String
+
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role            Role           @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  template        EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  sender          User           @relation("SentInvitations", fields: [createdBy], references: [id])
+  onboardingFlow  OnboardingFlow? @relation(fields: [onboardingFlowId], references: [id], onDelete: SetNull)
+  onboardingFlowId String?
+
+  @@unique([workspaceId, email])
+  @@map("user_invitations")
+}
+
+model EmailTemplate {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  name              String
+  subject           String
+  type               EmailTemplateType
+  description String
+  content           String
+  requiredVariables String[] @default([])
+  optionalVariables String[] @default([])
+  isActive          Boolean  @default(true)
+  isDefault          Boolean @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String
+
+  workspace    Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator      User             @relation(fields: [createdBy], references: [id])
+  invitations  UserInvitation[]
+
+  @@unique([workspaceId, name])
+  @@map("email_templates")
+}
+enum EmailTemplateType {
+  INVITATION
+  ACCEPTANCE
+  REJECTION
+}
+
+// ===== ROLE & PERMISSION MODELS =====
+
+model Role {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  name          String
+  description   String?
+  color         String?  @default("#3b82f6")
+  isSystem      Boolean  @default(false)
+  isDefault     Boolean  @default(false)
+  permissions   Json     @default("[]")
+  requiresOnboarding Boolean @default(true)
+  onboardingForm Json     @default("{}")
+  onboardingId       String?
+  requiredProfileFields Json @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members       WorkspaceMember[]
+  invitations   UserInvitation[]
+  onboarding    OnboardingFlow? @relation(fields: [onboardingId], references: [id])
+    activities Activity[]
+
+  @@unique([workspaceId, name])
+  @@map("roles")
+}
+
+// ===== ONBOARDING MODELS =====
+
+model OnboardingFlow {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  steps       Json     @default("[]")
+  settings    Json     @default("{}")
+  requiredProfileFields Json @default("[]")
+  customFields          Json @default("[]")
+  termsAndConditions   String?
+  privacyPolicy        String?
+  requireTermsAccept   Boolean  @default(false)
+  completionRequired   Boolean  @default(true)
+  completionMessage    String?
+  redirectUrl          String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator     User      @relation(fields: [createdBy], references: [id])
+  roles       Role[]
+  invitations UserInvitation[]
+  completions OnboardingCompletion[]
+
+  @@map("onboarding_flows")
+}
+
+model OnboardingCompletion {
+  id             String   @id @default(cuid())
+  userId         String
+  onboardingId   String
+  workspaceId    String
+  currentStep    Int      @default(0)
+  totalSteps     Int
+  isCompleted    Boolean  @default(false)
+  completedAt    DateTime?
+  stepProgress   Json     @default("[]")
+  collectedData  Json     @default("{}")
+  termsAcceptedAt    DateTime?
+  privacyAcceptedAt  DateTime?
+  legalAcceptances   Json @default("{}")
+  uploadedFiles      Json @default("[]")
+  startedAt      DateTime @default(now())
+  lastActiveAt   DateTime @default(now())
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  onboarding     OnboardingFlow @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  files          OnboardingFile[]
+
+  @@unique([userId, onboardingId])
+  @@map("onboarding_completions")
+}
+
+model OnboardingFile {
+  id             String   @id @default(cuid())
+  completionId   String
+  fieldName      String
+  originalName   String
+  fileName       String
+  fileUrl        String
+  fileSize       Int
+  mimeType       String
+  uploadedAt     DateTime @default(now())
+
+  completion     OnboardingCompletion @relation(fields: [completionId], references: [id], onDelete: Cascade)
+
+  @@map("onboarding_files")
+}
+
+// ===== APPLICATION MODELS =====
+
+model Application {
+  id          String   @id @default(cuid())
+  workspaceId String
+  title       String
+  description String?
+  isActive    Boolean  @default(true)
+  isPublic    Boolean  @default(true)
+  openDate    DateTime?
+  closeDate   DateTime?
+  maxSubmissions      Int?
+  allowMultipleSubmissions Boolean @default(false)
+  requireAuthentication   Boolean @default(false)
+  reviewerInstructions String?
+  scoringCriteria     Json?
+  submissionCount     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String @default("cmb52xu4g0000ncfotw25bjco")
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator       User      @relation(fields: [createdBy], references: [id])
+  formFields    ApplicationField[]
+  submissions   ApplicationSubmission[]
+   activities Activity[]
+
+  @@map("applications")
+}
+
+model ApplicationField {
+  id            String   @id @default(cuid())
+  applicationId String
+  type          FieldType
+  label         String
+  description   String?
+  placeholder   String?
+  required      Boolean  @default(false)
+  order         Int      @default(0)
+  section       String?
+  minLength     Int?
+  maxLength     Int?
+  minValue      Float?
+  maxValue      Float?
+  pattern       String?
+  options       Json?
+  allowedFileTypes Json?
+  maxFileSize      Int?
+  maxFiles         Int?
+  isVisible     Boolean  @default(true)
+  isConditional Boolean  @default(false)
+  showCondition Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("application_fields")
+}
+
+model ApplicationSubmission {
+  id                String             @id @default(cuid())
+  applicationId     String
+  applicantEmail     String?
+  applicantFirstName String?
+  applicantLastName  String?
+  applicantPhone     String?
+  companyName        String?
+  userId             String?
+  status             ApplicationStatus @default(DRAFT)
+  responses          Json              @default("{}")
+  progress           Float             @default(0.0)
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewedBy         String?
+  reviewNotes        String?
+  score              Float?
+  reviewData         Json?
+  invitationSent     Boolean           @default(false)
+  invitationToken    String?           @unique
+  invitedAt          DateTime?
+  attachments        Json?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  application        Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user               User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reviewer           User?             @relation("ApplicationReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  comments           ApplicationComment[]
+
+  @@unique([applicationId, applicantEmail])
+  @@map("application_submissions")
+}
+
+model ApplicationComment {
+  id           String   @id @default(cuid())
+  submissionId String
+  authorId     String
+  content      String
+  isInternal   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submission   ApplicationSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  author       User                  @relation(fields: [authorId], references: [id])
+
+  @@map("application_comments")
+}
+
+// ===== EVENT MODELS =====
+
+model Event {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  creatorId     String
+  title         String
+  description   String?
+  type          EventType      @default(WORKSHOP)
+  isPublic      Boolean        @default(false)
+  startDate     DateTime
+  endDate       DateTime
+  location      String?
+  virtualLink   String?
+  maxAttendees  Int?
+  settings      Json           @default("{}")
+  zoomMeetingId String?
+  recordingUrl  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+    timezone        String?    @default("UTC")
+  isRecurring     Boolean    @default(false)
+  recurringRule   Json?      // RRULE for recurring events
+  parentEventId   String?    // For recurring event instances
+  meetingPassword String?    // Zoom meeting password
+  waitingRoom     Boolean    @default(true)
+  requireApproval Boolean    @default(false)
+  capacity        Int?       // Alias for maxAttendees for clarity
+  isRecorded      Boolean    @default(false)
+  autoRecord      Boolean    @default(false)
+  agenda          String?    // Meeting agenda
+  instructions    String?    // Pre-meeting instructions
+  tags            String[]   @default([])
+  // activities Activity[] @relation("EventActivities")
+
+  // New relations:
+  speakers        EventSpeaker[]
+  accessRules     EventAccess[]
+  recordings      EventRecording[]
+  reminders       EventReminder[]
+  reschedules     EventReschedule[]
+  parentEvent     Event?     @relation("EventRecurrence", fields: [parentEventId], references: [id])
+  childEvents     Event[]    @relation("EventRecurrence")
+  waitlist        EventWaitlist[]
+
+  workspace      Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator        User                @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  registrations  EventRegistration[]
+  resources      EventResource[]
+
+  @@map("events")
+}
+
+
+model EventRegistration {
+  id         String              @id @default(cuid())
+  eventId    String
+  userId     String
+  status     EventRegistrationStatus @default(REGISTERED)
+  attendedAt DateTime?
+  createdAt  DateTime            @default(now())
+   invitedBy      String?
+  invitedAt      DateTime?
+  responseStatus ResponseStatus? @default(PENDING)
+  checkedInAt    DateTime?
+  checkedOutAt   DateTime?
+  feedback       String?
+  rating         Int?            // 1-5 stars
+  notes          String?         // Internal notes
+  metadata       Json            @default("{}")
+  remindersSent  Int             @default(0)
+  lastReminderAt DateTime?
+
+  // New relations:
+  inviter User? @relation("EventInviter", fields: [invitedBy], references: [id])
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("event_registrations")
+}
+
+model EventResource {
+  id         String   @id @default(cuid())
+  eventId    String
+  resourceId String
+  createdAt  DateTime @default(now())
+
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, resourceId])
+  @@map("event_resources")
+}
+
+model EventSpeaker {
+  id          String      @id @default(cuid())
+  eventId     String
+  userId      String?     // Internal user (mentor/admin)
+  name        String      // Display name
+  email       String?     // Contact email
+  bio         String?     // Speaker bio
+  avatar      String?     // Profile picture
+  company     String?     // Company/organization
+  jobTitle    String?     // Job title
+  role        SpeakerRole @default(SPEAKER)
+  isExternal  Boolean     @default(false)
+  isConfirmed Boolean     @default(false)
+  order       Int         @default(0) // Display order
+  honorarium  Float?      // Payment amount
+  notes       String?     // Internal notes
+  socialLinks Json        @default("{}")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  // user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("event_speakers")
+}
+
+// Granular event access control
+model EventAccess {
+  id         String          @id @default(cuid())
+  eventId    String
+  roleId     String?         // Specific role access
+  userId     String?         // Specific user access
+  accessType EventAccessType @default(INVITED)
+  isRequired Boolean         @default(false) // Required to attend
+  createdAt  DateTime        @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  // role  Role? @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, roleId])
+  @@unique([eventId, userId])
+  @@map("event_access")
+}
+
+// Enhanced recording management
+model EventRecording {
+  id             String   @id @default(cuid())
+  eventId        String
+  title          String
+  description    String?
+  recordingUrl   String
+  downloadUrl    String?
+  thumbnailUrl   String?
+  duration       Int?     // Duration in seconds
+  fileSize       Int?     // File size in bytes
+  format         String?  // mp4, webm, etc.
+  quality        String?  // HD, SD, etc.
+  isPublic       Boolean  @default(false)
+  isProcessed    Boolean  @default(false)
+  processingStatus RecordingStatus @default(PENDING)
+  viewCount      Int      @default(0)
+  downloadCount  Int      @default(0)
+  transcription  String?  // Auto-generated transcript
+  chapters       Json?    // Video chapters/timestamps
+  zoomRecordingId String? // Zoom's recording ID
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  views RecordingView[]
+
+  @@map("event_recordings")
+}
+
+// Track recording views
+model RecordingView {
+  id          String   @id @default(cuid())
+  recordingId String
+  userId      String?  // Null for anonymous views
+  ipAddress   String?
+  userAgent   String?
+  watchTime   Int?     // Seconds watched
+  completedAt DateTime?
+  viewedAt    DateTime @default(now())
+
+  recording EventRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("recording_views")
+}
+model EventWaitlist {
+  id          String   @id @default(cuid())
+  eventId     String
+  userId      String
+  position    Int      // Position in waitlist
+  joinedAt    DateTime @default(now())
+  notifiedAt  DateTime?
+  promotedAt  DateTime?
+  isPromoted  Boolean  @default(false)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("event_waitlist")
+}
+
+// Event reminders and notifications
+model EventReminder {
+  id           String       @id @default(cuid())
+  eventId      String
+  userId       String
+  reminderType ReminderType @default(EMAIL)
+  triggerTime  DateTime     // When to send reminder
+  message      String?      // Custom message
+  isSent       Boolean      @default(false)
+  sentAt       DateTime?
+  isDelivered  Boolean      @default(false)
+  deliveredAt  DateTime?
+  failureReason String?
+  createdAt    DateTime     @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId, triggerTime])
+  @@map("event_reminders")
+}
+
+// Event rescheduling history
+model EventReschedule {
+  id            String   @id @default(cuid())
+  eventId       String
+  oldStartDate  DateTime
+  oldEndDate    DateTime
+  newStartDate  DateTime
+  newEndDate    DateTime
+  reason        String?
+  notifyUsers   Boolean  @default(true)
+  rescheduledBy String
+  rescheduledAt DateTime @default(now())
+
+  event         Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rescheduler   User  @relation(fields: [rescheduledBy], references: [id])
+
+  @@map("event_reschedules")
+}
+model UserAvailability {
+  id        String  @id @default(cuid())
+  userId    String
+  dayOfWeek Int     // 0-6 (Sunday-Saturday)
+  startTime String  // "09:00" (24-hour format)
+  endTime   String  // "17:00" (24-hour format)
+  timezone  String  @default("UTC")
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayOfWeek])
+  @@map("user_availability")
+}
+
+// ===== RESOURCE MODELS =====
+
+model Resource {
+  id          String   @id @default(cuid())
+  workspaceId String
+  creatorId   String
+  title       String
+  description String?
+  type        ResourceType @default(FILE)
+  fileUrl     String?
+  fileName    String?
+  fileSize    Int?
+  mimeType    String?
+  isPublic    Boolean  @default(false)
+  tags        String[] @default([])
+  category    String?
+  downloadCount Int    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator      User            @relation("ResourceCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  access       ResourceAccess[]
+  eventLinks   EventResource[]
+
+  @@map("resources")
+}
+
+model ResourceAccess {
+  id         String   @id @default(cuid())
+  resourceId String
+  userId     String
+  accessedAt DateTime @default(now())
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceId, userId])
+  @@map("resource_access")
+}
+
+// ===== COMMUNICATION MODELS =====
+
+model Message {
+  id          String      @id @default(cuid())
+  workspaceId String
+  senderId    String
+  receiverId  String?
+  groupId     String?
+  content     String
+  type        MessageType @default(TEXT)
+  fileUrl     String?
+  fileName    String?
+  isRead      Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sender    User      @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver  User?     @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  workspaceId String
+  userId      String
+  title       String
+  message     String
+  type        NotificationType @default(INFO)
+  isRead      Boolean          @default(false)
+  actionUrl   String?
+  metadata    Json             @default("{}")
+  createdAt   DateTime         @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ===== ENUMS =====
+
+enum FieldType {
+  TEXT
+  TEXTAREA
+  EMAIL
+  PHONE
+  NUMBER
+  URL
+  DATE
+  DATETIME
+  SELECT
+  RADIO
+  CHECKBOX
+  BOOLEAN
+  FILE_UPLOAD
+  MULTI_FILE
+  SECTION_HEADER
+  RICH_TEXT
+  RATING
+  SLIDER
+  COLOR
+  SIGNATURE
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  SHORTLISTED
+  REJECTED
+  ACCEPTED
+  INVITED
+  ONBOARDED
+  WITHDRAWN
+  WAITLISTED
+}
+
+enum EventType {
+  WORKSHOP
+  MENTORING
+  PITCH
+  NETWORKING
+  DEMO_DAY
+  BOOTCAMP
+  WEBINAR
+  OTHER
+}
+
+enum EventRegistrationStatus {
+  REGISTERED
+  ATTENDED
+  NO_SHOW
+  CANCELLED
+}
+
+enum ResourceType {
+  FILE
+  LINK
+  VIDEO
+  DOCUMENT
+  PRESENTATION
+  SPREADSHEET
+  IMAGE
+  OTHER
+}
+
+enum MessageType {
+  TEXT
+  FILE
+  IMAGE
+  SYSTEM
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  EVENT
+  APPLICATION
+  MESSAGE
+  SYSTEM
+}
+
+enum ProfileFieldType {
+  TEXT
+  TEXTAREA
+  EMAIL
+  PHONE
+  URL
+  DATE
+  SELECT
+  RADIO
+  CHECKBOX
+  BOOLEAN
+  FILE_UPLOAD
+  IMAGE_UPLOAD
+  ADDRESS
+  LOCATION
+  RICH_TEXT
+  NUMBER
+  RATING
+  LEGAL_ACCEPTANCE
+}
+
+// Event enum
+
+enum SpeakerRole {
+  SPEAKER
+  HOST
+  MODERATOR
+  PANELIST
+  KEYNOTE
+  FACILITATOR
+}
+
+enum EventAccessType {
+  PUBLIC        // Anyone can join
+  INVITED       // Only invited users
+  ROLE_BASED    // Specific roles
+  RESTRICTED    // Admin approval required
+  PRIVATE       // Creator only
+}
+
+enum ReminderType {
+  EMAIL
+  IN_APP
+  SMS
+  PUSH
+}
+
+enum RecordingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  DELETED
+}
+
+enum ResponseStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  TENTATIVE
+  NO_RESPONSE
+}
