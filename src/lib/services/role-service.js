@@ -335,19 +335,29 @@ The {{workspace_name}} Team`
         category: 'Workspace Management',
         permissions: [
           {
-            key: 'workspace.manage',
-            label: 'Manage Workspace',
-            description: 'Full workspace administration',
-          },
-          {
-            key: 'workspace.settings',
-            label: 'Workspace Settings',
-            description: 'Modify workspace settings',
-          },
-          {
-            key: 'workspace.view',
+            key: PERMISSIONS.WORKSPACE_VIEW,
             label: 'View Workspace',
-            description: 'View workspace information',
+            description: 'View workspace information and basic details',
+          },
+          {
+            key: PERMISSIONS.WORKSPACE_MANAGE,
+            label: 'Manage Workspace',
+            description: 'Full workspace administration and control',
+          },
+          {
+            key: PERMISSIONS.WORKSPACE_SETTINGS,
+            label: 'Workspace Settings',
+            description: 'Modify workspace settings and configuration',
+          },
+          {
+            key: PERMISSIONS.WORKSPACE_DELETE,
+            label: 'Delete Workspace',
+            description: 'Delete workspace (admin only)',
+          },
+          {
+            key: PERMISSIONS.WORKSPACE_EXPORT,
+            label: 'Export Workspace Data',
+            description: 'Export workspace information and data',
           },
         ],
       },
@@ -355,66 +365,174 @@ The {{workspace_name}} Team`
         category: 'User Management',
         permissions: [
           {
-            key: 'users.manage',
+            key: PERMISSIONS.USERS_VIEW,
+            label: 'View Users',
+            description: 'View user profiles and lists',
+          },
+          {
+            key: PERMISSIONS.USERS_MANAGE,
             label: 'Manage Users',
             description: 'Full user management access',
           },
-          { key: 'users.invite', label: 'Invite Users', description: 'Send user invitations' },
-          { key: 'users.view', label: 'View Users', description: 'View user profiles and lists' },
           {
-            key: 'users.suspend',
+            key: PERMISSIONS.USERS_CREATE,
+            label: 'Create Users',
+            description: 'Create new user accounts',
+          },
+          {
+            key: PERMISSIONS.USERS_EDIT,
+            label: 'Edit Users',
+            description: 'Edit user profiles and information',
+          },
+          {
+            key: PERMISSIONS.USERS_DELETE,
+            label: 'Delete Users',
+            description: 'Delete user accounts',
+          },
+          {
+            key: PERMISSIONS.USERS_INVITE,
+            label: 'Invite Users',
+            description: 'Send user invitations',
+          },
+          {
+            key: PERMISSIONS.USERS_SUSPEND,
             label: 'Suspend Users',
             description: 'Suspend and reactivate users',
+          },
+          {
+            key: PERMISSIONS.USERS_EXPORT,
+            label: 'Export User Data',
+            description: 'Export user information and reports',
           },
         ],
       },
       {
         category: 'Role Management',
         permissions: [
-          { key: 'roles.manage', label: 'Manage Roles', description: 'Create and edit roles' },
-          { key: 'roles.assign', label: 'Assign Roles', description: 'Assign roles to users' },
-          { key: 'roles.view', label: 'View Roles', description: 'View role information' },
+          {
+            key: PERMISSIONS.ROLES_VIEW,
+            label: 'View Roles',
+            description: 'View role information and permissions',
+          },
+          {
+            key: PERMISSIONS.ROLES_MANAGE,
+            label: 'Manage Roles',
+            description: 'Full role management access',
+          },
+          {
+            key: PERMISSIONS.ROLES_CREATE,
+            label: 'Create Roles',
+            description: 'Create new roles and permissions',
+          },
+          {
+            key: PERMISSIONS.ROLES_EDIT,
+            label: 'Edit Roles',
+            description: 'Edit existing roles and permissions',
+          },
+          {
+            key: PERMISSIONS.ROLES_DELETE,
+            label: 'Delete Roles',
+            description: 'Delete roles (when not assigned)',
+          },
+          {
+            key: PERMISSIONS.ROLES_ASSIGN,
+            label: 'Assign Roles',
+            description: 'Assign roles to users',
+          },
         ],
       },
       {
         category: 'Applications',
         permissions: [
           {
-            key: 'applications.manage',
-            label: 'Manage Applications',
-            description: 'Full application control',
-          },
-          {
-            key: 'applications.create',
-            label: 'Create Applications',
-            description: 'Create new application forms',
-          },
-          {
-            key: 'applications.view',
+            key: PERMISSIONS.APPLICATIONS_VIEW,
             label: 'View Applications',
             description: 'View applications and submissions',
           },
           {
-            key: 'applications.review',
+            key: PERMISSIONS.APPLICATIONS_MANAGE,
+            label: 'Manage Applications',
+            description: 'Full application control and administration',
+          },
+          {
+            key: PERMISSIONS.APPLICATIONS_CREATE,
+            label: 'Create Applications',
+            description: 'Create new application forms',
+          },
+          {
+            key: PERMISSIONS.APPLICATIONS_EDIT,
+            label: 'Edit Applications',
+            description: 'Edit application forms and settings',
+          },
+          {
+            key: PERMISSIONS.APPLICATIONS_DELETE,
+            label: 'Delete Applications',
+            description: 'Delete application forms',
+          },
+          {
+            key: PERMISSIONS.APPLICATIONS_REVIEW,
             label: 'Review Applications',
             description: 'Review and score submissions',
+          },
+          {
+            key: PERMISSIONS.APPLICATIONS_APPROVE,
+            label: 'Approve Applications',
+            description: 'Approve application submissions',
+          },
+          {
+            key: PERMISSIONS.APPLICATIONS_REJECT,
+            label: 'Reject Applications',
+            description: 'Reject application submissions',
+          },
+          {
+            key: PERMISSIONS.APPLICATIONS_EXPORT,
+            label: 'Export Applications',
+            description: 'Export application data and reports',
           },
         ],
       },
       {
         category: 'Events',
         permissions: [
-          { key: 'events.manage', label: 'Manage Events', description: 'Full event management' },
-          { key: 'events.create', label: 'Create Events', description: 'Create new events' },
           {
-            key: 'events.view',
+            key: PERMISSIONS.EVENTS_VIEW,
             label: 'View Events',
             description: 'View events and registrations',
           },
           {
-            key: 'events.moderate',
+            key: PERMISSIONS.EVENTS_MANAGE,
+            label: 'Manage Events',
+            description: 'Full event management access',
+          },
+          {
+            key: PERMISSIONS.EVENTS_CREATE,
+            label: 'Create Events',
+            description: 'Create new events',
+          },
+          {
+            key: PERMISSIONS.EVENTS_EDIT,
+            label: 'Edit Events',
+            description: 'Edit event details and settings',
+          },
+          {
+            key: PERMISSIONS.EVENTS_DELETE,
+            label: 'Delete Events',
+            description: 'Delete events',
+          },
+          {
+            key: PERMISSIONS.EVENTS_MODERATE,
             label: 'Moderate Events',
-            description: 'Moderate event content',
+            description: 'Moderate event content and discussions',
+          },
+          {
+            key: PERMISSIONS.EVENTS_PUBLISH,
+            label: 'Publish Events',
+            description: 'Publish and unpublish events',
+          },
+          {
+            key: PERMISSIONS.EVENTS_EXPORT,
+            label: 'Export Event Data',
+            description: 'Export event and registration data',
           },
         ],
       },
@@ -422,22 +540,42 @@ The {{workspace_name}} Team`
         category: 'Resources',
         permissions: [
           {
-            key: 'resources.manage',
-            label: 'Manage Resources',
-            description: 'Full resource management',
-          },
-          {
-            key: 'resources.upload',
-            label: 'Upload Resources',
-            description: 'Upload new resources',
-          },
-          {
-            key: 'resources.view',
+            key: PERMISSIONS.RESOURCES_VIEW,
             label: 'View Resources',
-            description: 'Access resource library',
+            description: 'Access and view resource library',
           },
           {
-            key: 'resources.share',
+            key: PERMISSIONS.RESOURCES_MANAGE,
+            label: 'Manage Resources',
+            description: 'Full resource management access',
+          },
+          {
+            key: PERMISSIONS.RESOURCES_CREATE,
+            label: 'Create Resources',
+            description: 'Create new resource entries',
+          },
+          {
+            key: PERMISSIONS.RESOURCES_EDIT,
+            label: 'Edit Resources',
+            description: 'Edit resource information and metadata',
+          },
+          {
+            key: PERMISSIONS.RESOURCES_DELETE,
+            label: 'Delete Resources',
+            description: 'Delete resources from library',
+          },
+          {
+            key: PERMISSIONS.RESOURCES_UPLOAD,
+            label: 'Upload Resources',
+            description: 'Upload new resource files',
+          },
+          {
+            key: PERMISSIONS.RESOURCES_DOWNLOAD,
+            label: 'Download Resources',
+            description: 'Download resource files',
+          },
+          {
+            key: PERMISSIONS.RESOURCES_SHARE,
             label: 'Share Resources',
             description: 'Share resources externally',
           },
@@ -446,32 +584,246 @@ The {{workspace_name}} Team`
       {
         category: 'Communication',
         permissions: [
-          { key: 'chat.manage', label: 'Manage Chat', description: 'Full chat administration' },
-          { key: 'chat.moderate', label: 'Moderate Chat', description: 'Moderate chat content' },
-          { key: 'chat.create_groups', label: 'Create Groups', description: 'Create chat groups' },
-          { key: 'chat.view', label: 'View Chat', description: 'Access chat features' },
+          {
+            key: PERMISSIONS.CHAT_VIEW,
+            label: 'View Chat',
+            description: 'Access and view chat features',
+          },
+          {
+            key: PERMISSIONS.CHAT_MANAGE,
+            label: 'Manage Chat',
+            description: 'Full chat administration access',
+          },
+          {
+            key: PERMISSIONS.CHAT_CREATE_GROUPS,
+            label: 'Create Chat Groups',
+            description: 'Create new chat groups and channels',
+          },
+          {
+            key: PERMISSIONS.CHAT_EDIT_GROUPS,
+            label: 'Edit Chat Groups',
+            description: 'Edit chat group settings and details',
+          },
+          {
+            key: PERMISSIONS.CHAT_DELETE_GROUPS,
+            label: 'Delete Chat Groups',
+            description: 'Delete chat groups and channels',
+          },
+          {
+            key: PERMISSIONS.CHAT_MODERATE,
+            label: 'Moderate Chat',
+            description: 'Moderate chat content and users',
+          },
+          {
+            key: PERMISSIONS.CHAT_SEND_MESSAGES,
+            label: 'Send Messages',
+            description: 'Send messages in chat',
+          },
+          {
+            key: PERMISSIONS.CHAT_DELETE_MESSAGES,
+            label: 'Delete Messages',
+            description: 'Delete chat messages',
+          },
         ],
       },
       {
         category: 'Email Templates',
         permissions: [
           {
-            key: 'templates.manage',
-            label: 'Manage Templates',
-            description: 'Create and edit email templates',
+            key: PERMISSIONS.TEMPLATES_VIEW,
+            label: 'View Templates',
+            description: 'View email templates and content',
           },
-          { key: 'templates.view', label: 'View Templates', description: 'View email templates' },
+          {
+            key: PERMISSIONS.TEMPLATES_MANAGE,
+            label: 'Manage Templates',
+            description: 'Full template management access',
+          },
+          {
+            key: PERMISSIONS.TEMPLATES_CREATE,
+            label: 'Create Templates',
+            description: 'Create new email templates',
+          },
+          {
+            key: PERMISSIONS.TEMPLATES_EDIT,
+            label: 'Edit Templates',
+            description: 'Edit existing email templates',
+          },
+          {
+            key: PERMISSIONS.TEMPLATES_DELETE,
+            label: 'Delete Templates',
+            description: 'Delete email templates',
+          },
+          {
+            key: PERMISSIONS.TEMPLATES_SEND,
+            label: 'Send Templates',
+            description: 'Send emails using templates',
+          },
         ],
       },
       {
-        category: 'Analytics',
+        category: 'Notifications',
         permissions: [
           {
-            key: 'analytics.view',
-            label: 'View Analytics',
-            description: 'Access analytics and reports',
+            key: PERMISSIONS.NOTIFICATIONS_VIEW,
+            label: 'View Notifications',
+            description: 'View notification history and settings',
           },
-          { key: 'analytics.export', label: 'Export Data', description: 'Export analytics data' },
+          {
+            key: PERMISSIONS.NOTIFICATIONS_MANAGE,
+            label: 'Manage Notifications',
+            description: 'Full notification system management',
+          },
+          {
+            key: PERMISSIONS.NOTIFICATIONS_CREATE,
+            label: 'Create Notifications',
+            description: 'Create custom notifications',
+          },
+          {
+            key: PERMISSIONS.NOTIFICATIONS_SEND,
+            label: 'Send Notifications',
+            description: 'Send notifications to users',
+          },
+        ],
+      },
+      {
+        category: 'Analytics & Reports',
+        permissions: [
+          {
+            key: PERMISSIONS.ANALYTICS_VIEW,
+            label: 'View Analytics',
+            description: 'Access analytics dashboards and reports',
+          },
+          {
+            key: PERMISSIONS.ANALYTICS_MANAGE,
+            label: 'Manage Analytics',
+            description: 'Configure analytics settings and reports',
+          },
+          {
+            key: PERMISSIONS.ANALYTICS_EXPORT,
+            label: 'Export Analytics',
+            description: 'Export analytics data and reports',
+          },
+          {
+            key: PERMISSIONS.ANALYTICS_CREATE_REPORTS,
+            label: 'Create Reports',
+            description: 'Create custom analytics reports',
+          },
+        ],
+      },
+      {
+        category: 'File Management',
+        permissions: [
+          {
+            key: PERMISSIONS.FILES_VIEW,
+            label: 'View Files',
+            description: 'View and browse file system',
+          },
+          {
+            key: PERMISSIONS.FILES_MANAGE,
+            label: 'Manage Files',
+            description: 'Full file management access',
+          },
+          {
+            key: PERMISSIONS.FILES_UPLOAD,
+            label: 'Upload Files',
+            description: 'Upload new files',
+          },
+          {
+            key: PERMISSIONS.FILES_DELETE,
+            label: 'Delete Files',
+            description: 'Delete files from system',
+          },
+          {
+            key: PERMISSIONS.FILES_SHARE,
+            label: 'Share Files',
+            description: 'Share files with external users',
+          },
+        ],
+      },
+      {
+        category: 'Settings & Configuration',
+        permissions: [
+          {
+            key: PERMISSIONS.SETTINGS_VIEW,
+            label: 'View Settings',
+            description: 'View system and application settings',
+          },
+          {
+            key: PERMISSIONS.SETTINGS_MANAGE,
+            label: 'Manage Settings',
+            description: 'Full settings management access',
+          },
+          {
+            key: PERMISSIONS.SETTINGS_SYSTEM,
+            label: 'System Settings',
+            description: 'Modify core system settings',
+          },
+          {
+            key: PERMISSIONS.SETTINGS_INTEGRATIONS,
+            label: 'Integration Settings',
+            description: 'Configure third-party integrations',
+          },
+        ],
+      },
+      {
+        category: 'Billing & Subscriptions',
+        permissions: [
+          {
+            key: PERMISSIONS.BILLING_VIEW,
+            label: 'View Billing',
+            description: 'View billing information and invoices',
+          },
+          {
+            key: PERMISSIONS.BILLING_MANAGE,
+            label: 'Manage Billing',
+            description: 'Full billing and subscription management',
+          },
+          {
+            key: PERMISSIONS.BILLING_EXPORT,
+            label: 'Export Billing Data',
+            description: 'Export billing reports and data',
+          },
+        ],
+      },
+      {
+        category: 'API & Integrations',
+        permissions: [
+          {
+            key: PERMISSIONS.API_VIEW,
+            label: 'View API Settings',
+            description: 'View API keys and integration settings',
+          },
+          {
+            key: PERMISSIONS.API_MANAGE,
+            label: 'Manage API',
+            description: 'Full API and integration management',
+          },
+          {
+            key: PERMISSIONS.API_CREATE_KEYS,
+            label: 'Create API Keys',
+            description: 'Generate new API keys',
+          },
+          {
+            key: PERMISSIONS.API_DELETE_KEYS,
+            label: 'Delete API Keys',
+            description: 'Revoke and delete API keys',
+          },
+        ],
+      },
+      {
+        category: 'Audit & Security',
+        permissions: [
+          {
+            key: PERMISSIONS.AUDIT_VIEW,
+            label: 'View Audit Logs',
+            description: 'Access system audit logs and security events',
+          },
+          {
+            key: PERMISSIONS.AUDIT_EXPORT,
+            label: 'Export Audit Data',
+            description: 'Export audit logs and security reports',
+          },
         ],
       },
     ]
