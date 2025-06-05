@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
-import { PrismaClient } from '@prisma/client'
+
 import { NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 export async function GET(request) {

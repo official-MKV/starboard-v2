@@ -1,3 +1,9 @@
+import WorkspaceContext from '@/lib/workspace-context'
+import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/database'
+import logger from '@/lib/logger'
+
 export async function GET(request) {
   try {
     const session = await auth()
