@@ -75,8 +75,7 @@ import {
   Upload,
 } from 'lucide-react'
 
-// Import the enhanced onboarding form builder component
-import OnboardingFormBuilder from './OnboardingFormBuilder'
+import OnboardingFormBuilder from './onboardingFormBuilder'
 
 export default function RoleManagement() {
   const { data: session } = useSession()

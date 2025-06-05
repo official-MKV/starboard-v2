@@ -382,7 +382,7 @@ const FieldDialog = ({ isOpen, onClose, field = null, onSave }) => {
 }
 
 // ✅ FIXED: Main Component with clean state management
-export default function RobustOnboardingFormBuilder({ roleForm, setRoleForm }) {
+export default function OnboardingFormBuilder({ roleForm, setRoleForm }) {
   console.log('🚀 Component rendered with roleForm:', roleForm)
 
   const fields = roleForm?.onboardingFields || []
