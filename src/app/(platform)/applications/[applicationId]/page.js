@@ -1,10 +1,10 @@
+'use client'
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { DashboardNav } from '@/components/dashboard/nav'
 import { DashboardHeader } from '@/components/dashboard/header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -128,8 +128,6 @@ export default async function ApplicationDetailPage({ params }) {
 
   return (
     <div className="min-h-screen bg-snow-100">
-      <DashboardNav user={user} />
-
       <div className="pl-64">
         <DashboardHeader
           title={application.title}

@@ -4,6 +4,53 @@ import { twMerge } from 'tailwind-merge'
 export function cn(...inputs) {
   return twMerge(clsx(inputs))
 }
+export function formatDateTime(date, format = 'MMM dd, yyyy HH:mm') {
+  if (!date) return ''
+
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return ''
+
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ]
+
+  const hours = d.getHours()
+  const minutes = d.getMinutes()
+  const seconds = d.getSeconds()
+
+  switch (format) {
+    case 'MMM dd, yyyy HH:mm':
+      return `${months[d.getMonth()]} ${d.getDate().toString().padStart(2, '0')}, ${d.getFullYear()} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+
+    case 'MMM dd, yyyy hh:mm A':
+      const hour12 = hours % 12 || 12
+      const ampm = hours >= 12 ? 'PM' : 'AM'
+      return `${months[d.getMonth()]} ${d.getDate().toString().padStart(2, '0')}, ${d.getFullYear()} ${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`
+
+    case 'dd/mm/yyyy HH:mm':
+      return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+
+    case 'yyyy-mm-dd HH:mm:ss':
+      return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+
+    case 'ISO':
+      return d.toISOString()
+
+    default:
+      return d.toLocaleString()
+  }
+}
 
 export function formatDate(date, format = 'MMM dd, yyyy') {
   if (!date) return ''

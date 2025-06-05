@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Check, X, Loader2, Mail, ArrowLeft } from 'lucide-react'
 
-export default function VerifyEmailPage() {
+function VerifyEmailPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
@@ -238,5 +238,24 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function VerifyEmailFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-snow-50 to-neutral-100">
+      <div className="text-center">
+        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+        <p className="text-slate-gray-600">Loading...</p>
+      </div>
+    </div>
+  )
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<VerifyEmailFallback />}>
+      <VerifyEmailPageInner />
+    </Suspense>
   )
 }

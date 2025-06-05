@@ -1,10 +1,11 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas,
-    "Liberation Mono", Menlo, monospace;
+  --font-sans:
+    ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -193,7 +194,9 @@
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-feature-settings: "rlig" 1, "calt" 1;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
 }
 
 /* Starboard Custom Styles */
@@ -345,17 +348,17 @@ body {
   box-shadow: var(--shadow-soft-lg);
 }
 
-[data-sonner-toast][data-type="success"] {
+[data-sonner-toast][data-type='success'] {
   border-color: #bbf7d0;
   background-color: #f0fdf4;
 }
 
-[data-sonner-toast][data-type="error"] {
+[data-sonner-toast][data-type='error'] {
   border-color: #fecaca;
   background-color: #fef2f2;
 }
 
-[data-sonner-toast][data-type="warning"] {
+[data-sonner-toast][data-type='warning'] {
   border-color: #fde68a;
   background-color: #fffbeb;
 }

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, ArrowLeft, RefreshCw } from 'lucide-react'
+import { Suspense } from 'react'
 
 const errorMessages = {
   Configuration: {
@@ -29,7 +30,7 @@ const errorMessages = {
   },
 }
 
-export default function AuthErrorPage() {
+function AuthErrorContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error') || 'Default'
 
@@ -103,5 +104,29 @@ export default function AuthErrorPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+function ErrorFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-snow-50 to-neutral-100 px-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="h-8 w-8 text-red-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-charcoal-900">Loading...</h1>
+          <p className="text-slate-gray-600 mt-2">Preparing error details</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function AuthErrorPage() {
+  return (
+    <Suspense fallback={<ErrorFallback />}>
+      <AuthErrorContent />
+    </Suspense>
   )
 }
