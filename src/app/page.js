@@ -130,10 +130,11 @@ const HomePage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3 group">
-              <div className="relative w-12 h-12 bg-gradient-to-br from-[#3e3eff] to-[#0000e6] rounded-2xl flex items-center justify-center shadow-lg transform group-hover:scale-105 transition-all duration-300">
-                <div className="absolute inset-0 bg-gradient-to-br from-[#3e3eff] to-[#0000e6] rounded-2xl opacity-75 blur-sm group-hover:blur-md transition-all duration-300"></div>
-                <span className="relative text-white font-bold text-xl">S</span>
-              </div>
+              <img
+                src="/logo-1.svg"
+                alt="Logo"
+                className="w-12 h-12 transform group-hover:scale-105 transition-all duration-300"
+              />
               <div className="flex flex-col">
                 <span className="text-2xl font-bold bg-gradient-to-r from-[#3e3eff] to-[#0000e6] bg-clip-text text-transparent">
                   Starboard

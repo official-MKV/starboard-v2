@@ -180,9 +180,11 @@ export function DashboardNav() {
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <div className="flex items-center">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">S</span>
-              </div>
+              <img
+                src="/logo-1.svg"
+                alt="Logo"
+                className="w-12 h-12 transform group-hover:scale-105 transition-all duration-300"
+              />
               <span className="ml-2 text-xl font-semibold text-charcoal-800">Starboard</span>
             </div>
           )}

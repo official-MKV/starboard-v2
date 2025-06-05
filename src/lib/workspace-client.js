@@ -30,11 +30,7 @@ export class WorkspaceClient {
     if (typeof document === 'undefined') return null
 
     const cookies = document.cookie.split(';')
-    console.log(
-      'Workspace cookie:',
-      document.cookie.split(';').find(c => c.includes('starboard-workspace'))
-    )
-    console.log(cookies)
+
     const workspaceCookie = cookies.find(cookie =>
       cookie.trim().startsWith(`${WORKSPACE_COOKIE_NAME}=`)
     )

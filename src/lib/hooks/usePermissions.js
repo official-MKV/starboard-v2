@@ -8,8 +8,6 @@ export function usePermissions() {
   const { data: session } = useSession()
   const currentWorkspaceId = useWorkspaceCookie() // Get current workspace from cookie
 
-  console.log(session?.user)
-
   const getCurrentWorkspace = () => {
     if (!session?.user?.workspaces || !currentWorkspaceId) return null
 
@@ -44,10 +42,6 @@ export function usePermissions() {
   }
 
   const permissions = parsePermissions(currentWorkspace?.permissions || [])
-
-  // Debug log to verify parsing
-  console.log('Raw permissions:', currentWorkspace?.permissions)
-  console.log('Parsed permissions:', permissions)
 
   return {
     // Check single permission
