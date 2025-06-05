@@ -51,7 +51,7 @@ const navigationItems = [
   },
   {
     name: 'Messages',
-    href: '/messages',
+    href: '/chat',
     icon: MessageCircle,
     permissions: [PERMISSIONS.CHAT_VIEW, PERMISSIONS.CHAT_MANAGE],
   },
