@@ -1,6 +1,8 @@
 import React from 'react'
+import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { DashboardNav } from '@/components/dashboard/nav'
+import { ResponsiveLayoutWrapper } from '@/components/dashboard/responsive-layout'
 
 export default async function layout({ children }) {
   const session = await auth()
@@ -10,10 +12,11 @@ export default async function layout({ children }) {
   }
 
   const user = session.user
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-snow-50">
       <DashboardNav user={user} />
-      <div className="pl-64">{children}</div>
+      <ResponsiveLayoutWrapper>{children}</ResponsiveLayoutWrapper>
     </div>
   )
 }
