@@ -8,7 +8,6 @@ async function seed() {
   console.log('🌱 Starting database seed...')
 
   try {
-    // Create test users
     const adminPassword = await bcrypt.hash('admin123', 12)
     const userPassword = await bcrypt.hash('user123', 12)
 
