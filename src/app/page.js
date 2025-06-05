@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -67,6 +68,7 @@ const HomePage = () => {
   const [selectedOrganization, setSelectedOrganization] = useState('all')
   const [isVisible, setIsVisible] = useState(false)
   const [scrollY, setScrollY] = useState(0)
+  const router = useRouter()
 
   useEffect(() => {
     setIsVisible(true)
@@ -161,9 +163,13 @@ const HomePage = () => {
               <Button
                 variant="ghost"
                 className="text-neutral-600 hover:text-[#3e3eff] transition-all duration-300 hover:bg-[#f0f0ff]"
+                onClick={() => {
+                  router.push('/auth/login')
+                }}
               >
                 Sign In
               </Button>
+
               <Button className="bg-gradient-to-r from-[#3e3eff] to-[#0000e6] hover:from-[#0000e6] hover:to-[#0000cc] text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
                 <Sparkles className="mr-2 h-4 w-4" />
                 Get Started

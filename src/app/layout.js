@@ -10,9 +10,6 @@ export const metadata = {
   description: 'Comprehensive platform for managing accelerator programs, startups, and mentors',
   keywords: 'accelerator, startups, mentorship, program management',
   authors: [{ name: 'Starboard Team' }],
-  metadataBase: new URL(
-    process.env.NODE_ENV === 'production' ? 'https://app.mystarboard.ng' : 'http://localhost:3000'
-  ),
 }
 
 export const viewport = {
