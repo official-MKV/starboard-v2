@@ -77,8 +77,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
-// Import the Role Management component and InviteUsersForm
-import RoleManagement from './RoleManagement'
+import RoleManagement from './rolemanagement'
 import InviteUsersForm from './inviteUsers'
 
 export default function UsersManagement() {
