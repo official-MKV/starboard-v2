@@ -608,7 +608,7 @@ export default function InvitationAcceptPage({ params }) {
         firstName: accountForm.firstName.trim(),
         lastName: accountForm.lastName.trim(),
         password: accountForm.password,
-        avatar: accountForm.avatar?.fileUrl || null, / // Already contains uploaded avatar data
+        avatar: accountForm.avatar?.fileUrl || null, // Already contains uploaded avatar data
       }
 
       const response = await fetch(`/api/invitations/accept?token=${token}`, {
