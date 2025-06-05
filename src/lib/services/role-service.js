@@ -2,6 +2,7 @@
 import { prisma, handleDatabaseError } from '../database.js'
 import { logger } from '../logger.js'
 import { EmailTemplateService } from './email-template-service.js'
+import PERMISSIONS from '@/lib/utils/permissions'
 
 /**
  * Role Management Service
