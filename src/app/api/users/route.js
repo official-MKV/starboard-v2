@@ -1,4 +1,4 @@
-// app/api/users/route.js
+// app/api/users/route.js - Enhanced version with search
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
@@ -7,7 +7,13 @@ import { logger } from '@/lib/logger'
 
 /**
  * GET /api/users
- * Get all users for current workspace
+ * Get all users for current workspace with optional search
+ * Query params:
+ * - search: string to search by name, email, or role
+ * - role: filter by specific role ID
+ * - active: boolean to filter by active status
+ * - limit: number of results to return
+ * - offset: pagination offset
  */
 export async function GET(request) {
   try {
@@ -25,7 +31,6 @@ export async function GET(request) {
       )
     }
 
-    // Check permissions
     const hasPermission = await WorkspaceContext.hasAnyPermission(
       session.user.id,
       workspaceContext.workspaceId,
@@ -39,11 +44,59 @@ export async function GET(request) {
       )
     }
 
+    // Parse query parameters
+    const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search')?.trim()
+    const roleFilter = searchParams.get('role')
+    const activeFilter = searchParams.get('active')
+    const limit = parseInt(searchParams.get('limit')) || 50
+    const offset = parseInt(searchParams.get('offset')) || 0
+
+    // Build where clause
+    const whereClause = {
+      workspaceId: workspaceContext.workspaceId,
+    }
+
+    // Add role filter
+    if (roleFilter) {
+      whereClause.roleId = roleFilter
+    }
+
+    // Add active filter
+    if (activeFilter !== null) {
+      whereClause.isActive = activeFilter === 'true'
+    }
+
+    // Add search filter
+    if (search) {
+      whereClause.OR = [
+        {
+          user: {
+            OR: [
+              { firstName: { contains: search, mode: 'insensitive' } },
+              { lastName: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+              { company: { contains: search, mode: 'insensitive' } },
+              { jobTitle: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        },
+        {
+          role: {
+            name: { contains: search, mode: 'insensitive' },
+          },
+        },
+      ]
+    }
+
+    // Get total count for pagination
+    const totalCount = await prisma.workspaceMember.count({
+      where: whereClause,
+    })
+
     // Get users for workspace
     const users = await prisma.workspaceMember.findMany({
-      where: {
-        workspaceId: workspaceContext.workspaceId,
-      },
+      where: whereClause,
       include: {
         user: {
           select: {
@@ -52,6 +105,10 @@ export async function GET(request) {
             lastName: true,
             email: true,
             avatar: true,
+            company: true,
+            jobTitle: true,
+            bio: true,
+            phone: true,
             isEmailVerified: true,
             lastLoginAt: true,
             createdAt: true,
@@ -67,16 +124,22 @@ export async function GET(request) {
           },
         },
       },
-      orderBy: [{ isActive: 'desc' }, { joinedAt: 'desc' }],
+      orderBy: [{ isActive: 'desc' }, { user: { firstName: 'asc' } }, { joinedAt: 'desc' }],
+      take: limit,
+      skip: offset,
     })
 
-    // Transform data
     const transformedUsers = users.map(member => ({
       id: member.user.id,
       firstName: member.user.firstName,
       lastName: member.user.lastName,
+      fullName: `${member.user.firstName} ${member.user.lastName}`,
       email: member.user.email,
       avatar: member.user.avatar,
+      company: member.user.company,
+      jobTitle: member.user.jobTitle,
+      bio: member.user.bio,
+      phone: member.user.phone,
       isActive: member.isActive,
       isEmailVerified: member.user.isEmailVerified,
       lastLoginAt: member.user.lastLoginAt,
@@ -89,11 +152,23 @@ export async function GET(request) {
       workspaceId: workspaceContext.workspaceId,
       userId: session.user.id,
       userCount: transformedUsers.length,
+      totalCount,
+      search,
+      roleFilter,
+      activeFilter,
     })
 
     return NextResponse.json({
       success: true,
-      data: { users: transformedUsers },
+      data: {
+        users: transformedUsers,
+        pagination: {
+          total: totalCount,
+          limit,
+          offset,
+          hasMore: offset + limit < totalCount,
+        },
+      },
     })
   } catch (error) {
     logger.error('Error fetching users', { error: error.message })
@@ -140,7 +215,16 @@ export async function POST(request) {
 
     // Parse request body
     const body = await request.json()
-    const { firstName, lastName, email, roleId, sendInvitation = true } = body
+    const {
+      firstName,
+      lastName,
+      email,
+      roleId,
+      company,
+      jobTitle,
+      phone,
+      sendInvitation = true,
+    } = body
 
     // Validate required fields
     if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
@@ -204,6 +288,9 @@ export async function POST(request) {
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             email: email.trim().toLowerCase(),
+            company: company?.trim() || null,
+            jobTitle: jobTitle?.trim() || null,
+            phone: phone?.trim() || null,
             isEmailVerified: false,
           },
         })
@@ -226,6 +313,9 @@ export async function POST(request) {
               lastName: true,
               email: true,
               avatar: true,
+              company: true,
+              jobTitle: true,
+              phone: true,
               isEmailVerified: true,
             },
           },
@@ -258,8 +348,12 @@ export async function POST(request) {
       id: result.user.id,
       firstName: result.user.firstName,
       lastName: result.user.lastName,
+      fullName: `${result.user.firstName} ${result.user.lastName}`,
       email: result.user.email,
       avatar: result.user.avatar,
+      company: result.user.company,
+      jobTitle: result.user.jobTitle,
+      phone: result.user.phone,
       isActive: result.isActive,
       isEmailVerified: result.user.isEmailVerified,
       joinedAt: result.joinedAt,

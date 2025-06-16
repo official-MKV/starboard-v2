@@ -1,3 +1,4 @@
+// app/api/events/[id]/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
@@ -5,103 +6,107 @@ import { EventService } from '@/lib/services/event-service'
 import { logger } from '@/lib/logger'
 
 /**
- * GET /api/events
- * Get all events for current workspace with filters
+ * GET /api/events/[id]
+ * Get event details by ID
  */
-export async function GET(request) {
+export async function GET(request, { params }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context
-    const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
-    if (!workspaceContext) {
-      return NextResponse.json(
-        { error: { message: 'Workspace context required' } },
-        { status: 400 }
-      )
+    const eventId = params.eventId
+
+    // Get event details first to check workspace access
+    const event = await EventService.findById(eventId)
+    if (!event) {
+      return NextResponse.json({ error: { message: 'Event not found' } }, { status: 404 })
     }
 
-    // Check permissions
-    const hasPermission = await WorkspaceContext.hasAnyPermission(
-      session.user.id,
-      workspaceContext.workspaceId,
-      ['events.view', 'events.manage']
-    )
+    // Check if event is public or user has workspace access
+    let hasAccess = event.isPublic
 
-    if (!hasPermission) {
+    if (!hasAccess) {
+      // Get workspace context from cookies
+      const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
+
+      if (workspaceContext && workspaceContext.workspaceId === event.workspaceId) {
+        // Check permissions for workspace events
+        hasAccess = await WorkspaceContext.hasAnyPermission(session.user.id, event.workspaceId, [
+          'events.view',
+          'events.manage',
+        ])
+      }
+    }
+
+    if (!hasAccess) {
+      // Additional check: verify user has specific access to this event
+      hasAccess = await EventService.checkEventAccess(eventId, session.user.id)
+    }
+
+    if (!hasAccess) {
       return NextResponse.json(
-        { error: { message: 'Insufficient permissions to view events' } },
+        { error: { message: 'Insufficient permissions to view this event' } },
         { status: 403 }
       )
     }
 
-    // Parse query parameters
-    const url = new URL(request.url)
-    const filters = {
-      search: url.searchParams.get('search') || '',
-      type: url.searchParams.get('type') || 'all',
-      status: url.searchParams.get('status') || 'all',
-      date: url.searchParams.get('date') || 'all',
-      page: parseInt(url.searchParams.get('page')) || 1,
-      limit: parseInt(url.searchParams.get('limit')) || 50,
-    }
-
-    // Get events
-    const result = await EventService.findByWorkspace(workspaceContext.workspaceId, filters)
-
-    logger.info('Events fetched', {
-      workspaceId: workspaceContext.workspaceId,
+    logger.info('Event fetched', {
+      eventId,
       userId: session.user.id,
-      filters,
-      eventCount: result.events.length,
+      isPublic: event.isPublic,
+      workspaceId: event.workspaceId,
     })
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: { event },
     })
   } catch (error) {
-    logger.error('Error fetching events', { error: error.message })
+    logger.error('Error fetching event', { eventId: params.eventId, error: error.message })
     return NextResponse.json(
-      { error: { message: error.message || 'Failed to fetch events' } },
+      { error: { message: error.message || 'Failed to fetch event' } },
       { status: 500 }
     )
   }
 }
 
 /**
- * POST /api/events
- * Create a new event
+ * PUT /api/events/[id]
+ * Update event by ID
  */
-export async function POST(request) {
+export async function PUT(request, { params }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context
+    const eventId = params.eventId
+
+    // Get event details first to check workspace access
+    const existingEvent = await EventService.findById(eventId)
+    if (!existingEvent) {
+      return NextResponse.json({ error: { message: 'Event not found' } }, { status: 404 })
+    }
+
+    // Check workspace context
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
-    if (!workspaceContext) {
-      return NextResponse.json(
-        { error: { message: 'Workspace context required' } },
-        { status: 400 }
-      )
+    if (!workspaceContext || workspaceContext.workspaceId !== existingEvent.workspaceId) {
+      return NextResponse.json({ error: { message: 'Invalid workspace context' } }, { status: 400 })
     }
 
     // Check permissions
     const hasPermission = await WorkspaceContext.hasPermission(
       session.user.id,
-      workspaceContext.workspaceId,
+      existingEvent.workspaceId,
       'events.manage'
     )
 
-    if (!hasPermission) {
+    if (!hasPermission && existingEvent.creatorId !== session.user.id) {
       return NextResponse.json(
-        { error: { message: 'Insufficient permissions to create events' } },
+        { error: { message: 'Insufficient permissions to update this event' } },
         { status: 403 }
       )
     }
@@ -116,103 +121,178 @@ export async function POST(request) {
       endDate,
       location,
       virtualLink,
+      isVirtual,
       isPublic,
       maxAttendees,
-      requireApproval,
+      bannerImage,
       waitingRoom,
-      isRecorded,
       autoRecord,
-      meetingPassword,
+      requireApproval,
       agenda,
       instructions,
       tags,
       speakers,
       accessRules,
       resources,
+      timezone,
+      isRecurring,
+      recurringRule,
     } = body
 
     // Validate required fields
-    if (!title?.trim()) {
-      return NextResponse.json({ error: { message: 'Event title is required' } }, { status: 400 })
-    }
-
-    if (!startDate || !endDate) {
+    if (title !== undefined && !title?.trim()) {
       return NextResponse.json(
-        { error: { message: 'Start and end dates are required' } },
+        { error: { message: 'Event title cannot be empty' } },
         { status: 400 }
       )
     }
 
-    if (new Date(endDate) <= new Date(startDate)) {
+    if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
       return NextResponse.json(
         { error: { message: 'End date must be after start date' } },
         { status: 400 }
       )
     }
 
-    // Validate virtual meeting requirements
-    const isVirtual = !!virtualLink
-    if (isVirtual && !virtualLink) {
+    if (isVirtual && virtualLink === '') {
       return NextResponse.json(
         { error: { message: 'Virtual link is required for virtual events' } },
         { status: 400 }
       )
     }
 
-    if (!isVirtual && !location) {
-      return NextResponse.json(
-        { error: { message: 'Location is required for in-person events' } },
-        { status: 400 }
-      )
-    }
+    // Create update data (only include fields that are provided)
+    const updateData = {}
 
-    // Create event data
-    const eventData = {
-      title: title.trim(),
-      description: description?.trim() || null,
-      type: type || 'WORKSHOP',
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
-      location: isVirtual ? null : location?.trim(),
-      virtualLink: isVirtual ? virtualLink.trim() : null,
-      isPublic: Boolean(isPublic),
-      maxAttendees: maxAttendees ? parseInt(maxAttendees) : null,
-      requireApproval: Boolean(requireApproval),
-      waitingRoom: Boolean(waitingRoom),
-      isRecorded: Boolean(isRecorded),
-      autoRecord: Boolean(autoRecord),
-      meetingPassword: meetingPassword?.trim() || null,
-      agenda: agenda?.trim() || null,
-      instructions: instructions?.trim() || null,
-      tags: tags || [],
-      speakers: speakers || [],
-      accessRules: accessRules || [],
-      resources: resources || [],
-    }
+    if (title !== undefined) updateData.title = title.trim()
+    if (description !== undefined) updateData.description = description?.trim() || null
+    if (type !== undefined) updateData.type = type
+    if (startDate !== undefined) updateData.startDate = new Date(startDate)
+    if (endDate !== undefined) updateData.endDate = new Date(endDate)
+    if (location !== undefined) updateData.location = location?.trim() || null
+    if (virtualLink !== undefined) updateData.virtualLink = isVirtual ? virtualLink?.trim() : null
+    if (isVirtual !== undefined) updateData.isVirtual = Boolean(isVirtual)
+    if (isPublic !== undefined) updateData.isPublic = Boolean(isPublic)
+    if (maxAttendees !== undefined)
+      updateData.maxAttendees = maxAttendees ? parseInt(maxAttendees) : null
+    if (bannerImage !== undefined) updateData.bannerImage = bannerImage?.trim() || null
+    if (waitingRoom !== undefined) updateData.waitingRoom = Boolean(waitingRoom)
+    if (autoRecord !== undefined) updateData.autoRecord = Boolean(autoRecord)
+    if (requireApproval !== undefined) updateData.requireApproval = Boolean(requireApproval)
+    if (agenda !== undefined) updateData.agenda = agenda?.trim() || null
+    if (instructions !== undefined) updateData.instructions = instructions?.trim() || null
+    if (tags !== undefined)
+      updateData.tags = Array.isArray(tags) ? tags.filter(tag => tag?.trim()) : []
+    if (timezone !== undefined) updateData.timezone = timezone || 'UTC'
+    if (isRecurring !== undefined) updateData.isRecurring = Boolean(isRecurring)
+    if (recurringRule !== undefined) updateData.recurringRule = isRecurring ? recurringRule : null
+    if (speakers !== undefined) updateData.speakers = Array.isArray(speakers) ? speakers : []
+    if (accessRules !== undefined)
+      updateData.accessRules = Array.isArray(accessRules) ? accessRules : []
+    if (resources !== undefined) updateData.resources = Array.isArray(resources) ? resources : []
 
-    // Create the event
-    const event = await EventService.create(
-      workspaceContext.workspaceId,
-      eventData,
-      session.user.id
-    )
+    // Update the event
+    const event = await EventService.update(eventId, updateData, session.user.id)
 
-    logger.info('Event created', {
-      eventId: event.id,
+    logger.info('Event updated', {
+      eventId,
       eventTitle: event.title,
-      workspaceId: workspaceContext.workspaceId,
       userId: session.user.id,
+      workspaceId: event.workspaceId,
+      updatedFields: Object.keys(updateData),
     })
 
     return NextResponse.json({
       success: true,
       data: { event },
-      message: 'Event created successfully',
+      message: 'Event updated successfully',
     })
   } catch (error) {
-    logger.error('Error creating event', { error: error.message })
+    logger.error('Error updating event', { eventId: params.eventId, error: error.message })
     return NextResponse.json(
-      { error: { message: error.message || 'Failed to create event' } },
+      { error: { message: error.message || 'Failed to update event' } },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * DELETE /api/events/[id]
+ * Delete event by ID
+ */
+export async function DELETE(request, { params }) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
+    }
+
+    const eventId = params.eventId
+
+    // Get event details first to check workspace access
+    const existingEvent = await EventService.findById(eventId)
+    if (!existingEvent) {
+      return NextResponse.json({ error: { message: 'Event not found' } }, { status: 404 })
+    }
+
+    // Check workspace context
+    const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
+    if (!workspaceContext || workspaceContext.workspaceId !== existingEvent.workspaceId) {
+      return NextResponse.json({ error: { message: 'Invalid workspace context' } }, { status: 400 })
+    }
+
+    // Check permissions
+    const hasPermission = await WorkspaceContext.hasPermission(
+      session.user.id,
+      existingEvent.workspaceId,
+      'events.manage'
+    )
+
+    if (!hasPermission && existingEvent.creatorId !== session.user.id) {
+      return NextResponse.json(
+        { error: { message: 'Insufficient permissions to delete this event' } },
+        { status: 403 }
+      )
+    }
+
+    // Check if event has registrations (optional safety check)
+    if (existingEvent._count?.registrations > 0) {
+      const { searchParams } = new URL(request.url)
+      const force = searchParams.get('force') === 'true'
+
+      if (!force) {
+        return NextResponse.json(
+          {
+            error: {
+              message: 'Event has registered participants. Use force=true to delete anyway.',
+              code: 'HAS_REGISTRATIONS',
+              registrationCount: existingEvent._count.registrations,
+            },
+          },
+          { status: 409 }
+        )
+      }
+    }
+
+    // Delete the event
+    await EventService.delete(eventId, session.user.id)
+
+    logger.info('Event deleted', {
+      eventId,
+      eventTitle: existingEvent.title,
+      userId: session.user.id,
+      workspaceId: existingEvent.workspaceId,
+      hadRegistrations: existingEvent._count?.registrations > 0,
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: 'Event deleted successfully',
+    })
+  } catch (error) {
+    logger.error('Error deleting event', { eventId: params.eventId, error: error.message })
+    return NextResponse.json(
+      { error: { message: error.message || 'Failed to delete event' } },
       { status: 500 }
     )
   }

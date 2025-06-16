@@ -141,7 +141,7 @@ export default function CreateApplicationPage() {
     <div className="min-h-screen bg-snow-100">
       <DashboardNav user={session.user} />
 
-      <div className="pl-64">
+      <div className="">
         <DashboardHeader
           title="Create Application"
           description="Build a new application form for your accelerator program"

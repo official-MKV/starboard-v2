@@ -5,10 +5,6 @@ import { WorkspaceContext } from '@/lib/workspace-context'
 import { InvitationService } from '@/lib/services/invitation-service'
 import { logger } from '@/lib/logger'
 
-/**
- * GET /api/invitations
- * Get all invitations for current workspace
- */
 export async function GET(request) {
   try {
     const session = await auth()
@@ -74,11 +70,6 @@ export async function GET(request) {
   }
 }
 
-/**
- * POST /api/invitations
- * Create new invitations
- */
-
 export async function POST(request) {
   try {
     const session = await auth()
@@ -110,7 +101,6 @@ export async function POST(request) {
     const body = await request.json()
     const { email, emails, roleId, personalMessage, variableData = {}, expiresInDays = 7 } = body
 
-    // Handle single or bulk invitations
     const emailList = emails || [email]
 
     if (!emailList || emailList.length === 0) {
@@ -124,7 +114,6 @@ export async function POST(request) {
       return NextResponse.json({ error: { message: 'Role is required' } }, { status: 400 })
     }
 
-    // Validate email addresses
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const invalidEmails = emailList.filter(email => !emailRegex.test(email.trim()))
 
@@ -135,16 +124,12 @@ export async function POST(request) {
       )
     }
 
-    // Clean and deduplicate emails
     const cleanEmails = [...new Set(emailList.map(email => email.trim().toLowerCase()))]
 
-    // Calculate expiry date
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + expiresInDays)
 
-    // Create invitations
     if (cleanEmails.length === 1) {
-      // Single invitation
       const invitation = await InvitationService.create(
         workspaceContext.workspaceId,
         {
@@ -162,7 +147,6 @@ export async function POST(request) {
         message: 'Invitation sent successfully',
       })
     } else {
-      // Bulk invitations - CORRECTED method name
       const results = await InvitationService.bulkCreate({
         workspaceId: workspaceContext.workspaceId,
         emails: cleanEmails,

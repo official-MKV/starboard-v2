@@ -191,9 +191,7 @@ function handleWorkspaceProtectedRoute(request, pathname) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except static files and uploads
-     */
+
     '/((?!_next/static|_next/image|favicon.ico|uploads|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

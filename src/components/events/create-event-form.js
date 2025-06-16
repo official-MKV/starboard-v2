@@ -1,21 +1,37 @@
-// components/events/create-event-form.jsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { format } from 'date-fns'
-import { CalendarIcon, Plus, X, Video, MapPin, Users, Clock } from 'lucide-react'
+import {
+  MapPin,
+  Video,
+  Users,
+  Plus,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+  User,
+  UserPlus,
+  Loader2,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import {
   Select,
   SelectContent,
@@ -23,15 +39,58 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { FileUpload } from '@/components/ui/file-upload'
 import { Separator } from '@/components/ui/separator'
-import { cn } from '@/lib/utils'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'sonner'
+import { useMutation, useQuery } from '@tanstack/react-query'
 
+const EVENT_TYPES = [
+  { value: 'WORKSHOP', label: 'Workshop' },
+  { value: 'MENTORING', label: 'Mentoring' },
+  { value: 'PITCH', label: 'Pitch Session' },
+  { value: 'NETWORKING', label: 'Networking' },
+  { value: 'DEMO_DAY', label: 'Demo Day' },
+  { value: 'BOOTCAMP', label: 'Bootcamp' },
+  { value: 'WEBINAR', label: 'Webinar' },
+  { value: 'OTHER', label: 'Other' },
+]
+
+const SPEAKER_ROLES = [
+  { value: 'SPEAKER', label: 'Speaker' },
+  { value: 'HOST', label: 'Host' },
+  { value: 'MODERATOR', label: 'Moderator' },
+  { value: 'PANELIST', label: 'Panelist' },
+  { value: 'KEYNOTE', label: 'Keynote Speaker' },
+  { value: 'FACILITATOR', label: 'Facilitator' },
+]
+
+// External speaker validation schema
+const externalSpeakerSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email format').optional().or(z.literal('')),
+  bio: z.string().optional(),
+  company: z.string().optional(),
+  jobTitle: z.string().optional(),
+  role: z.enum(['SPEAKER', 'HOST', 'MODERATOR', 'PANELIST', 'KEYNOTE', 'FACILITATOR']),
+})
+
+// Form validation schema - REMOVED tags field
 const eventSchema = z
   .object({
-    title: z.string().min(1, 'Event title is required').max(100, 'Title too long'),
+    // Basic Info
+    title: z.string().min(1, 'Event title is required').max(200, 'Title is too long'),
     description: z.string().optional(),
     type: z.enum([
       'WORKSHOP',
@@ -43,60 +102,116 @@ const eventSchema = z
       'WEBINAR',
       'OTHER',
     ]),
-    startDate: z.date({ required_error: 'Start date is required' }),
-    endDate: z.date({ required_error: 'End date is required' }),
-    startTime: z.string().min(1, 'Start time is required'),
-    endTime: z.string().min(1, 'End time is required'),
+    bannerImage: z
+      .object({
+        url: z.string(),
+        fileName: z.string(),
+        originalName: z.string(),
+        fileKey: z.string(),
+      })
+      .optional()
+      .nullable(),
+
+    // Date & Time
+    startDate: z.string().min(1, 'Start date is required'),
+    endDate: z.string().min(1, 'End date is required'),
     timezone: z.string().default('UTC'),
+
+    // Location
     isVirtual: z.boolean().default(false),
     location: z.string().optional(),
-    virtualLink: z.string().url().optional(),
-    meetingPassword: z.string().optional(),
+
+    // Settings
     isPublic: z.boolean().default(false),
-    requireApproval: z.boolean().default(false),
     maxAttendees: z.number().min(1).optional(),
     waitingRoom: z.boolean().default(true),
-    isRecorded: z.boolean().default(false),
     autoRecord: z.boolean().default(false),
     agenda: z.string().optional(),
     instructions: z.string().optional(),
-    tags: z.array(z.string()).default([]),
+
+    // Advanced
+    isRecurring: z.boolean().default(false),
+    recurringRule: z.object({}).optional(),
   })
   .refine(
     data => {
-      if (data.isVirtual && !data.virtualLink) {
-        return false
-      }
-      if (!data.isVirtual && !data.location) {
-        return false
-      }
-      return data.endDate > data.startDate
+      const start = new Date(data.startDate)
+      const end = new Date(data.endDate)
+      return start < end
     },
     {
-      message: 'End date must be after start date, and virtual events need a meeting link',
+      message: 'End date must be after start date',
       path: ['endDate'],
     }
   )
 
-const EVENT_TYPES = [
-  { value: 'WORKSHOP', label: 'Workshop', description: 'Interactive learning session' },
-  { value: 'MENTORING', label: 'Mentoring', description: 'One-on-one or group mentoring' },
-  { value: 'PITCH', label: 'Pitch', description: 'Startup pitch session' },
-  { value: 'NETWORKING', label: 'Networking', description: 'Networking event' },
-  { value: 'DEMO_DAY', label: 'Demo Day', description: 'Product demonstration day' },
-  { value: 'BOOTCAMP', label: 'Bootcamp', description: 'Intensive training program' },
-  { value: 'WEBINAR', label: 'Webinar', description: 'Online seminar' },
-  { value: 'OTHER', label: 'Other', description: 'Custom event type' },
-]
-
-export function CreateEventForm({ onSuccess }) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
+// Simple speaker management hook
+function useEventSpeakers() {
   const [speakers, setSpeakers] = useState([])
-  const [newSpeaker, setNewSpeaker] = useState({
-    role: 'SPEAKER',
-    isExternal: false,
-  })
-  const [currentTag, setCurrentTag] = useState('')
+
+  const addSpeaker = useCallback(
+    speakerData => {
+      // Check for duplicates
+      const isDuplicate = speakers.some(
+        speaker =>
+          speaker.email === speakerData.email ||
+          (speaker.userId && speaker.userId === speakerData.userId)
+      )
+
+      if (isDuplicate) {
+        toast.error('Speaker already added to this event')
+        return
+      }
+
+      const newSpeaker = {
+        ...speakerData,
+        id: `temp-${Date.now()}-${Math.random()}`,
+      }
+
+      setSpeakers(prev => [...prev, newSpeaker])
+      toast.success('Speaker added successfully')
+      return newSpeaker
+    },
+    [speakers]
+  )
+
+  const removeSpeaker = useCallback(speakerId => {
+    setSpeakers(prev => prev.filter(speaker => speaker.id !== speakerId))
+    toast.success('Speaker removed')
+  }, [])
+
+  return {
+    speakers,
+    setSpeakers,
+    addSpeaker,
+    removeSpeaker,
+  }
+}
+
+// Add debounced search hook
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
+
+export function CreateEventForm({ eventId, onSuccess, onCancel }) {
+  const [currentStep, setCurrentStep] = useState(0)
+  const [accessRules, setAccessRules] = useState([])
+  const [isAddingSpeaker, setIsAddingSpeaker] = useState(false)
+
+  // Use speaker management hook
+  const { speakers, setSpeakers, addSpeaker, removeSpeaker } = useEventSpeakers()
 
   const form = useForm({
     resolver: zodResolver(eventSchema),
@@ -104,658 +219,1063 @@ export function CreateEventForm({ onSuccess }) {
       type: 'WORKSHOP',
       isVirtual: false,
       isPublic: false,
-      requireApproval: false,
       waitingRoom: true,
-      isRecorded: false,
       autoRecord: false,
+      isRecurring: false,
       timezone: 'UTC',
-      tags: [],
+      bannerImage: null,
     },
   })
 
-  const watchIsVirtual = form.watch('isVirtual')
-  const watchStartDate = form.watch('startDate')
-  const watchEndDate = form.watch('endDate')
-  const watchTags = form.watch('tags')
+  const { watch, setValue, getValues } = form
+  const watchedIsVirtual = watch('isVirtual')
+  const watchedIsPublic = watch('isPublic')
 
-  const onSubmit = async data => {
-    setIsSubmitting(true)
-    try {
-      // Combine date and time
-      const startDateTime = new Date(data.startDate)
-      const [startHour, startMinute] = data.startTime.split(':')
-      startDateTime.setHours(parseInt(startHour), parseInt(startMinute))
+  // Fetch event data for editing
+  const { data: eventData } = useQuery({
+    queryKey: ['event', eventId],
+    queryFn: async () => {
+      if (!eventId) return null
+      const response = await fetch(`/api/events/${eventId}`)
+      if (!response.ok) throw new Error('Failed to fetch event')
+      return response.json()
+    },
+    enabled: !!eventId,
+  })
 
-      const endDateTime = new Date(data.endDate)
-      const [endHour, endMinute] = data.endTime.split(':')
-      endDateTime.setHours(parseInt(endHour), parseInt(endMinute))
+  // Populate form when editing
+  useEffect(() => {
+    if (eventData?.data?.event) {
+      const event = eventData.data.event
 
-      const eventData = {
+      // Populate basic form data
+      Object.keys(event).forEach(key => {
+        if (key in form.getValues()) {
+          if (key === 'bannerImage' && event[key]) {
+            // Handle banner image conversion
+            if (typeof event[key] === 'string') {
+              // If it's a URL string, convert to object format
+              form.setValue(key, {
+                url: event[key],
+                fileName: event[key].split('/').pop() || 'banner-image',
+                originalName: 'Banner Image',
+                fileKey: event[key].split('/').pop() || 'banner-image',
+              })
+            } else if (typeof event[key] === 'object' && event[key]?.url) {
+              // If it's already an object, use as is
+              form.setValue(key, event[key])
+            }
+          } else if (key === 'startDate' || key === 'endDate') {
+            // Format dates for datetime-local input
+            const date = new Date(event[key])
+            const formatted = date.toISOString().slice(0, 16)
+            form.setValue(key, formatted)
+          } else {
+            form.setValue(key, event[key])
+          }
+        }
+      })
+
+      // Populate speakers
+      setSpeakers(event.speakers || [])
+
+      // Populate access rules
+      setAccessRules(event.accessRules || [])
+    }
+  }, [eventData, form, setSpeakers])
+
+  // Create/Update mutation
+  const saveEventMutation = useMutation({
+    mutationFn: async data => {
+      const payload = {
         ...data,
-        startDate: startDateTime.toISOString(),
-        endDate: endDateTime.toISOString(),
-        speakers: speakers.filter(speaker => speaker.name && speaker.email),
+        // Convert banner image object to URL string for API
+        bannerImage: data.bannerImage?.url || null,
+        speakers, // Include speakers from state
+        accessRules,
       }
 
-      const response = await fetch('/api/events', {
-        method: 'POST',
+      const url = eventId ? `/api/events/${eventId}` : '/api/events'
+      const method = eventId ? 'PUT' : 'POST'
+
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventData),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error?.message || 'Failed to create event')
+        throw new Error(errorData.error?.message || 'Failed to save event')
       }
 
-      toast.success('Event created successfully')
+      return response.json()
+    },
+    onSuccess: () => {
+      toast.success(eventId ? 'Event updated successfully' : 'Event created successfully')
       onSuccess?.()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create event')
-    } finally {
-      setIsSubmitting(false)
+    },
+    onError: error => {
+      toast.error(error.message)
+    },
+  })
+
+  const onSubmit = data => {
+    saveEventMutation.mutate(data)
+  }
+
+  // Steps configuration
+  const steps = [
+    {
+      title: 'Basic Information',
+      description: 'Event details and description',
+    },
+    {
+      title: 'Date & Location',
+      description: 'When and where the event takes place',
+    },
+    {
+      title: 'Speakers',
+      description: 'Add speakers and presenters',
+    },
+    {
+      title: 'Access & Settings',
+      description: 'Who can attend and event settings',
+    },
+  ]
+
+  const canGoNext = () => {
+    switch (currentStep) {
+      case 0:
+        return !!getValues('title') && !!getValues('type')
+      case 1:
+        return !!getValues('startDate') && !!getValues('endDate')
+      case 2:
+        return true // Speakers are optional
+      case 3:
+        return true // Access rules have defaults
+      default:
+        return false
     }
   }
 
-  const addSpeaker = () => {
-    if (!newSpeaker.name || !newSpeaker.email) {
-      toast.error('Speaker name and email are required')
-      return
+  const handleAddSpeaker = useCallback(
+    speaker => {
+      addSpeaker(speaker)
+      setIsAddingSpeaker(false)
+    },
+    [addSpeaker]
+  )
+
+  const handleRemoveSpeaker = useCallback(
+    speakerId => {
+      removeSpeaker(speakerId)
+    },
+    [removeSpeaker]
+  )
+
+  // FIXED: Manual form submission
+  const handleFormSubmit = () => {
+    form.handleSubmit(onSubmit)()
+  }
+
+  // Step components
+  const BasicInfoStep = () => (
+    <div className="space-y-6">
+      <FormField
+        control={form.control}
+        name="title"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Event Title *</FormLabel>
+            <FormControl>
+              <Input placeholder="Enter event title" {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="description"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Description</FormLabel>
+            <FormControl>
+              <Textarea placeholder="Describe your event..." rows={4} {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="type"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Event Type *</FormLabel>
+            <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select event type" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {EVENT_TYPES.map(type => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="bannerImage"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Banner Image</FormLabel>
+            <FormControl>
+              <FileUpload
+                value={field.value}
+                onChange={field.onChange}
+                accept="image/*"
+                maxSize={10 * 1024 * 1024} // 10MB
+                folder="events"
+                placeholder="Upload event banner"
+                description="PNG, JPG, GIF up to 10MB"
+                preview={true}
+              />
+            </FormControl>
+            <FormDescription>Upload a banner image for your event</FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  )
+
+  const DateLocationStep = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FormField
+          control={form.control}
+          name="startDate"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Start Date & Time *</FormLabel>
+              <FormControl>
+                <Input type="datetime-local" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="endDate"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>End Date & Time *</FormLabel>
+              <FormControl>
+                <Input type="datetime-local" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
+      <FormField
+        control={form.control}
+        name="timezone"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Timezone</FormLabel>
+            <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value="UTC">UTC</SelectItem>
+                <SelectItem value="America/New_York">Eastern Time</SelectItem>
+                <SelectItem value="America/Chicago">Central Time</SelectItem>
+                <SelectItem value="America/Denver">Mountain Time</SelectItem>
+                <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
+                <SelectItem value="Europe/London">London</SelectItem>
+                <SelectItem value="Europe/Paris">Paris</SelectItem>
+                <SelectItem value="Asia/Tokyo">Tokyo</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="isVirtual"
+        render={({ field }) => (
+          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <FormLabel className="text-base">Virtual Event</FormLabel>
+              <FormDescription>This event will be held online</FormDescription>
+            </div>
+            <FormControl>
+              <Switch checked={field.value} onCheckedChange={field.onChange} />
+            </FormControl>
+          </FormItem>
+        )}
+      />
+
+      {watchedIsVirtual ? (
+        <div className="rounded-lg border p-4 bg-blue-50">
+          <div className="flex gap-3">
+            <Video className="w-5 h-5 text-blue-600 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-blue-900 mb-1">Virtual Meeting</h4>
+              <p className="text-sm text-blue-700">
+                A Zoom meeting will be automatically created for this event. The meeting link will
+                be provided to registered participants.
+              </p>
+              <div className="mt-2 text-xs text-blue-600">
+                <strong>Meeting features:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  <li>
+                    Waiting room{' '}
+                    {watchedIsVirtual && form.watch('waitingRoom') ? 'enabled' : 'disabled'}
+                  </li>
+                  <li>
+                    Auto-recording{' '}
+                    {watchedIsVirtual && form.watch('autoRecord') ? 'enabled' : 'disabled'}
+                  </li>
+                  <li>Automatic participant muting</li>
+                  <li>Host video enabled</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <FormField
+          control={form.control}
+          name="location"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Location</FormLabel>
+              <FormControl>
+                <div className="flex gap-2">
+                  <MapPin className="w-5 h-5 text-gray-400 mt-2" />
+                  <Input placeholder="Enter event location" {...field} />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+    </div>
+  )
+
+  const SpeakersStep = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium">Event Speakers</h3>
+          <p className="text-sm text-gray-500">Add speakers and presenters for your event</p>
+        </div>
+        <Button type="button" variant="outline" onClick={() => setIsAddingSpeaker(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Speaker
+        </Button>
+      </div>
+
+      {speakers.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Users className="w-12 h-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No speakers added</h3>
+            <p className="text-gray-500 text-center mb-4">
+              Add speakers to showcase who will be presenting at your event
+            </p>
+            <Button type="button" onClick={() => setIsAddingSpeaker(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add First Speaker
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {speakers.map((speaker, index) => (
+            <Card key={speaker.id || index}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <Avatar className="w-12 h-12">
+                    <AvatarImage src={speaker.avatar || '/placeholder.svg'} alt={speaker.name} />
+                    <AvatarFallback>
+                      {speaker.name
+                        ?.split(' ')
+                        .map(n => n[0])
+                        .join('')
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-medium text-gray-900">{speaker.name}</h4>
+                      <Badge variant={speaker.isExternal ? 'outline' : 'secondary'}>
+                        {speaker.isExternal ? 'External' : 'Internal'}
+                      </Badge>
+                      <Badge variant="outline">{speaker.role}</Badge>
+                    </div>
+                    {speaker.jobTitle && speaker.company && (
+                      <p className="text-sm text-gray-500">
+                        {speaker.jobTitle} at {speaker.company}
+                      </p>
+                    )}
+                    {speaker.bio && (
+                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{speaker.bio}</p>
+                    )}
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemoveSpeaker(speaker.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Add Speaker Dialog */}
+      <AddSpeakerDialog
+        open={isAddingSpeaker}
+        onOpenChange={setIsAddingSpeaker}
+        onAdd={handleAddSpeaker}
+      />
+    </div>
+  )
+
+  const AccessSettingsStep = () => (
+    <div className="space-y-6">
+      <FormField
+        control={form.control}
+        name="isPublic"
+        render={({ field }) => (
+          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <FormLabel className="text-base">Public Event</FormLabel>
+              <FormDescription>Make this event visible on your public website</FormDescription>
+            </div>
+            <FormControl>
+              <Switch checked={field.value} onCheckedChange={field.onChange} />
+            </FormControl>
+          </FormItem>
+        )}
+      />
+
+      {watchedIsPublic && (
+        <FormField
+          control={form.control}
+          name="maxAttendees"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Maximum Attendees</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  placeholder="Unlimited"
+                  {...field}
+                  onChange={e =>
+                    field.onChange(e.target.value ? Number.parseInt(e.target.value) : undefined)
+                  }
+                />
+              </FormControl>
+              <FormDescription>Leave empty for unlimited capacity</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
+      {watchedIsVirtual && (
+        <div className="space-y-4">
+          <FormField
+            control={form.control}
+            name="waitingRoom"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Waiting Room</FormLabel>
+                  <FormDescription>Enable waiting room for virtual meetings</FormDescription>
+                </div>
+                <FormControl>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="autoRecord"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Auto Record</FormLabel>
+                  <FormDescription>Automatically record virtual meetings</FormDescription>
+                </div>
+                <FormControl>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+      )}
+
+      <div>
+        <FormField
+          control={form.control}
+          name="agenda"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Agenda</FormLabel>
+              <FormControl>
+                <Textarea placeholder="Event agenda or schedule..." rows={3} {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
+      <div>
+        <FormField
+          control={form.control}
+          name="instructions"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Instructions</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Pre-event instructions for attendees..."
+                  rows={3}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+    </div>
+  )
+
+  const getCurrentStepComponent = () => {
+    switch (currentStep) {
+      case 0:
+        return <BasicInfoStep />
+      case 1:
+        return <DateLocationStep />
+      case 2:
+        return <SpeakersStep />
+      case 3:
+        return <AccessSettingsStep />
+      default:
+        return <BasicInfoStep />
     }
-
-    setSpeakers([...speakers, { ...newSpeaker }])
-    setNewSpeaker({ role: 'SPEAKER', isExternal: false })
-  }
-
-  const removeSpeaker = index => {
-    setSpeakers(speakers.filter((_, i) => i !== index))
-  }
-
-  const addTag = () => {
-    if (!currentTag.trim()) return
-    const currentTags = form.getValues('tags')
-    if (!currentTags.includes(currentTag.trim())) {
-      form.setValue('tags', [...currentTags, currentTag.trim()])
-    }
-    setCurrentTag('')
-  }
-
-  const removeTag = tagToRemove => {
-    const currentTags = form.getValues('tags')
-    form.setValue(
-      'tags',
-      currentTags.filter(tag => tag !== tagToRemove)
-    )
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-      <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="basic">Basic Info</TabsTrigger>
-          <TabsTrigger value="datetime">Date & Time</TabsTrigger>
-          <TabsTrigger value="location">Location</TabsTrigger>
-          <TabsTrigger value="speakers">Speakers</TabsTrigger>
-        </TabsList>
+    <Form {...form}>
+      <div className="space-y-6">
+        {/* Progress Steps */}
+        <div className="flex items-center justify-between">
+          {steps.map((step, index) => (
+            <div key={index} className="flex items-center">
+              <div
+                className={`
+                w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
+                ${index <= currentStep ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}
+              `}
+              >
+                {index + 1}
+              </div>
 
-        <TabsContent value="basic" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Event Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Event Title *</Label>
-                <Input
-                  id="title"
-                  placeholder="Enter event title"
-                  {...form.register('title')}
-                  className={cn('starboard-input', form.formState.errors.title && 'field-error')}
+              {index < steps.length - 1 && (
+                <div
+                  className={`
+                  w-12 h-0.5 mx-2
+                  ${index < currentStep ? 'bg-blue-600' : 'bg-gray-200'}
+                `}
                 />
-                {form.formState.errors.title && (
-                  <p className="error-message">{form.formState.errors.title.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Describe your event..."
-                  rows={3}
-                  {...form.register('description')}
-                  className="starboard-input"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="type">Event Type *</Label>
-                <Select
-                  value={form.watch('type')}
-                  onValueChange={value => form.setValue('type', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select event type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EVENT_TYPES.map(type => (
-                      <SelectItem key={type.value} value={type.value}>
-                        <div>
-                          <div className="font-medium">{type.label}</div>
-                          <div className="text-sm text-gray-500">{type.description}</div>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Tags</Label>
-                <div className="flex gap-2 mb-2 flex-wrap">
-                  {watchTags.map(tag => (
-                    <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                      {tag}
-                      <X
-                        className="w-3 h-3 cursor-pointer hover:text-red-500"
-                        onClick={() => removeTag(tag)}
-                      />
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Add tag..."
-                    value={currentTag}
-                    onChange={e => setCurrentTag(e.target.value)}
-                    onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                    className="starboard-input"
-                  />
-                  <Button type="button" variant="outline" onClick={addTag}>
-                    Add
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="isPublic">Public Event</Label>
-                    <p className="text-sm text-gray-500">Allow external participants</p>
-                  </div>
-                  <Switch
-                    id="isPublic"
-                    checked={form.watch('isPublic')}
-                    onCheckedChange={checked => form.setValue('isPublic', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="requireApproval">Require Approval</Label>
-                    <p className="text-sm text-gray-500">Manually approve registrations</p>
-                  </div>
-                  <Switch
-                    id="requireApproval"
-                    checked={form.watch('requireApproval')}
-                    onCheckedChange={checked => form.setValue('requireApproval', checked)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="maxAttendees">Maximum Attendees</Label>
-                <Input
-                  id="maxAttendees"
-                  type="number"
-                  min="1"
-                  placeholder="Leave empty for unlimited"
-                  {...form.register('maxAttendees', { valueAsNumber: true })}
-                  className="starboard-input"
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="datetime" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Date & Time Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date *</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          'w-full justify-start text-left font-normal',
-                          !watchStartDate && 'text-muted-foreground'
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {watchStartDate ? format(watchStartDate, 'PPP') : 'Select start date'}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={watchStartDate}
-                        onSelect={date => form.setValue('startDate', date)}
-                        disabled={date => date < new Date()}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {form.formState.errors.startDate && (
-                    <p className="error-message">{form.formState.errors.startDate.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>End Date *</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          'w-full justify-start text-left font-normal',
-                          !watchEndDate && 'text-muted-foreground'
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {watchEndDate ? format(watchEndDate, 'PPP') : 'Select end date'}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={watchEndDate}
-                        onSelect={date => form.setValue('endDate', date)}
-                        disabled={date => date < (watchStartDate || new Date())}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {form.formState.errors.endDate && (
-                    <p className="error-message">{form.formState.errors.endDate.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="startTime">Start Time *</Label>
-                  <Input
-                    id="startTime"
-                    type="time"
-                    {...form.register('startTime')}
-                    className={cn(
-                      'starboard-input',
-                      form.formState.errors.startTime && 'field-error'
-                    )}
-                  />
-                  {form.formState.errors.startTime && (
-                    <p className="error-message">{form.formState.errors.startTime.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="endTime">End Time *</Label>
-                  <Input
-                    id="endTime"
-                    type="time"
-                    {...form.register('endTime')}
-                    className={cn(
-                      'starboard-input',
-                      form.formState.errors.endTime && 'field-error'
-                    )}
-                  />
-                  {form.formState.errors.endTime && (
-                    <p className="error-message">{form.formState.errors.endTime.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Timezone</Label>
-                <Select
-                  value={form.watch('timezone')}
-                  onValueChange={value => form.setValue('timezone', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select timezone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="UTC">UTC</SelectItem>
-                    <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                    <SelectItem value="America/Chicago">Central Time</SelectItem>
-                    <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                    <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                    <SelectItem value="Europe/London">London</SelectItem>
-                    <SelectItem value="Europe/Paris">Paris</SelectItem>
-                    <SelectItem value="Asia/Tokyo">Tokyo</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="agenda">Agenda</Label>
-                <Textarea
-                  id="agenda"
-                  placeholder="Event agenda or schedule..."
-                  rows={4}
-                  {...form.register('agenda')}
-                  className="starboard-input"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="instructions">Pre-meeting Instructions</Label>
-                <Textarea
-                  id="instructions"
-                  placeholder="Instructions for participants before the event..."
-                  rows={3}
-                  {...form.register('instructions')}
-                  className="starboard-input"
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="location" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Location Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="isVirtual">Virtual Event</Label>
-                  <p className="text-sm text-gray-500">Host online via Zoom</p>
-                </div>
-                <Switch
-                  id="isVirtual"
-                  checked={watchIsVirtual}
-                  onCheckedChange={checked => form.setValue('isVirtual', checked)}
-                />
-              </div>
-
-              {watchIsVirtual ? (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="virtualLink">Meeting URL</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="virtualLink"
-                        placeholder="https://zoom.us/j/..."
-                        {...form.register('virtualLink')}
-                        className={cn(
-                          'starboard-input flex-1',
-                          form.formState.errors.virtualLink && 'field-error'
-                        )}
-                      />
-                      <Button type="button" variant="outline">
-                        <Video className="w-4 h-4 mr-2" />
-                        Create Zoom
-                      </Button>
-                    </div>
-                    {form.formState.errors.virtualLink && (
-                      <p className="error-message">{form.formState.errors.virtualLink.message}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="meetingPassword">Meeting Password</Label>
-                    <Input
-                      id="meetingPassword"
-                      placeholder="Optional meeting password"
-                      {...form.register('meetingPassword')}
-                      className="starboard-input"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="waitingRoom">Waiting Room</Label>
-                        <p className="text-sm text-gray-500">Host admits participants</p>
-                      </div>
-                      <Switch
-                        id="waitingRoom"
-                        checked={form.watch('waitingRoom')}
-                        onCheckedChange={checked => form.setValue('waitingRoom', checked)}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="isRecorded">Record Meeting</Label>
-                        <p className="text-sm text-gray-500">Save recording</p>
-                      </div>
-                      <Switch
-                        id="isRecorded"
-                        checked={form.watch('isRecorded')}
-                        onCheckedChange={checked => form.setValue('isRecorded', checked)}
-                      />
-                    </div>
-                  </div>
-
-                  {form.watch('isRecorded') && (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="autoRecord">Auto Record</Label>
-                        <p className="text-sm text-gray-500">Start recording automatically</p>
-                      </div>
-                      <Switch
-                        id="autoRecord"
-                        checked={form.watch('autoRecord')}
-                        onCheckedChange={checked => form.setValue('autoRecord', checked)}
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location *</Label>
-                  <div className="flex gap-2">
-                    <MapPin className="w-5 h-5 text-gray-400 mt-2" />
-                    <Input
-                      id="location"
-                      placeholder="Enter venue address or location"
-                      {...form.register('location')}
-                      className={cn(
-                        'starboard-input flex-1',
-                        form.formState.errors.location && 'field-error'
-                      )}
-                    />
-                  </div>
-                  {form.formState.errors.location && (
-                    <p className="error-message">{form.formState.errors.location.message}</p>
-                  )}
-                </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          ))}
+        </div>
 
-        <TabsContent value="speakers" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Event Speakers</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Current Speakers */}
-              {speakers.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="font-medium">Added Speakers ({speakers.length})</h4>
-                  {speakers.map((speaker, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 border rounded-lg"
+        <div className="text-center">
+          <h2 className="text-xl font-semibold">{steps[currentStep].title}</h2>
+          <p className="text-gray-600">{steps[currentStep].description}</p>
+        </div>
+
+        <Separator />
+
+        {/* Current Step Content */}
+        <div className="min-h-[400px]">{getCurrentStepComponent()}</div>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between pt-6 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
+            disabled={currentStep === 0}
+          >
+            <ChevronLeft className="w-4 h-4 mr-2" />
+            Previous
+          </Button>
+
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+
+            {currentStep === steps.length - 1 ? (
+              <Button
+                type="button"
+                onClick={handleFormSubmit}
+                disabled={saveEventMutation.isPending}
+              >
+                {saveEventMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : null}
+                {eventId ? 'Update Event' : 'Create Event'}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => setCurrentStep(Math.min(steps.length - 1, currentStep + 1))}
+                disabled={!canGoNext()}
+              >
+                Next
+                <ChevronRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Form>
+  )
+}
+
+// FIXED: Enhanced Add Speaker Dialog Component with PROPER form handling
+function AddSpeakerDialog({ open, onOpenChange, onAdd }) {
+  const [speakerType, setSpeakerType] = useState('internal')
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [userSearchOpen, setUserSearchOpen] = useState(false)
+  const [localSearchTerm, setLocalSearchTerm] = useState('')
+  const [externalSpeakerData, setExternalSpeakerData] = useState({
+    name: '',
+    email: '',
+    bio: '',
+    company: '',
+    jobTitle: '',
+    role: 'SPEAKER',
+  })
+
+  // Debounced search term
+  const debouncedSearchTerm = useDebounce(localSearchTerm, 300)
+
+  // Mock users data for demonstration
+  const mockUsers = [
+    {
+      id: '1',
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john@example.com',
+      avatar: '/avatars/john.jpg',
+      company: 'Tech Corp',
+      jobTitle: 'Senior Developer',
+      role: { name: 'Developer' },
+    },
+    {
+      id: '2',
+      firstName: 'Jane',
+      lastName: 'Smith',
+      email: 'jane@example.com',
+      avatar: '/avatars/jane.jpg',
+      company: 'Design Studio',
+      jobTitle: 'UX Designer',
+      role: { name: 'Designer' },
+    },
+  ]
+
+  // Filter users based on search
+  const filteredUsers = useMemo(() => {
+    if (!localSearchTerm) return mockUsers
+
+    const search = localSearchTerm.toLowerCase()
+    return mockUsers.filter(
+      user =>
+        `${user.firstName} ${user.lastName}`.toLowerCase().includes(search) ||
+        user.email.toLowerCase().includes(search) ||
+        user.role?.name.toLowerCase().includes(search)
+    )
+  }, [localSearchTerm])
+
+  // FIXED: Handle speaker addition WITHOUT form submission
+  const handleAddSpeaker = async () => {
+    try {
+      if (speakerType === 'internal') {
+        if (!selectedUser) {
+          toast.error('Please select a user')
+          return
+        }
+
+        const speaker = {
+          userId: selectedUser.id,
+          name: `${selectedUser.firstName} ${selectedUser.lastName}`,
+          email: selectedUser.email,
+          avatar: selectedUser.avatar,
+          company: selectedUser.company,
+          jobTitle: selectedUser.jobTitle,
+          role: externalSpeakerData.role,
+          isExternal: false,
+          isConfirmed: true,
+        }
+
+        onAdd(speaker)
+      } else {
+        // Validate external speaker form
+        if (!externalSpeakerData.name?.trim()) {
+          toast.error('Speaker name is required')
+          return
+        }
+
+        const speaker = {
+          ...externalSpeakerData,
+          isExternal: true,
+          isConfirmed: false,
+        }
+
+        onAdd(speaker)
+      }
+
+      // Reset form and close dialog
+      setExternalSpeakerData({
+        name: '',
+        email: '',
+        bio: '',
+        company: '',
+        jobTitle: '',
+        role: 'SPEAKER',
+      })
+      setSelectedUser(null)
+      setSpeakerType('internal')
+      setLocalSearchTerm('')
+      setUserSearchOpen(false)
+    } catch (error) {
+      console.error('Error adding speaker:', error)
+      toast.error('Failed to add speaker')
+    }
+  }
+
+  // Reset when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setLocalSearchTerm('')
+      setUserSearchOpen(false)
+      setExternalSpeakerData({
+        name: '',
+        email: '',
+        bio: '',
+        company: '',
+        jobTitle: '',
+        role: 'SPEAKER',
+      })
+      setSelectedUser(null)
+      setSpeakerType('internal')
+    }
+  }, [open])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add Speaker</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          {/* Speaker Type Toggle */}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={speakerType === 'internal' ? 'default' : 'outline'}
+              onClick={() => {
+                setSpeakerType('internal')
+                setSelectedUser(null)
+              }}
+              className="flex-1"
+            >
+              <User className="w-4 h-4 mr-2" />
+              Internal User
+            </Button>
+            <Button
+              type="button"
+              variant={speakerType === 'external' ? 'default' : 'outline'}
+              onClick={() => {
+                setSpeakerType('external')
+                setSelectedUser(null)
+              }}
+              className="flex-1"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              External Speaker
+            </Button>
+          </div>
+
+          {/* Internal User Selector */}
+          {speakerType === 'internal' ? (
+            <div className="space-y-4">
+              <div>
+                <Label>Select User</Label>
+                <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={userSearchOpen}
+                      className="w-full justify-between"
                     >
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarFallback>
-                            {speaker.name
-                              .split(' ')
-                              .map(n => n[0])
-                              .join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{speaker.name}</p>
-                          <p className="text-sm text-gray-500">{speaker.email}</p>
-                          {speaker.company && (
-                            <p className="text-sm text-gray-500">
-                              {speaker.jobTitle} at {speaker.company}
-                            </p>
-                          )}
-                          <Badge variant="outline" className="mt-1">
-                            {speaker.role.replace('_', ' ')}
-                          </Badge>
+                      {selectedUser ? (
+                        <div className="flex items-center gap-2">
+                          <Avatar className="w-6 h-6">
+                            <AvatarImage
+                              src={selectedUser.avatar || '/placeholder.svg'}
+                              alt={selectedUser.firstName}
+                            />
+                            <AvatarFallback>
+                              {selectedUser.firstName?.[0]}
+                              {selectedUser.lastName?.[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          {selectedUser.firstName} {selectedUser.lastName}
                         </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeSpeaker(index)}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+                      ) : (
+                        'Select a workspace member...'
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search users..."
+                        value={localSearchTerm}
+                        onValueChange={setLocalSearchTerm}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No users found.</CommandEmpty>
+                        <CommandGroup className="max-h-64 overflow-auto">
+                          {filteredUsers?.map(user => (
+                            <CommandItem
+                              key={user.id}
+                              value={`${user.firstName} ${user.lastName} ${user.email}`}
+                              onSelect={() => {
+                                setSelectedUser(user)
+                                setUserSearchOpen(false)
+                              }}
+                            >
+                              <div className="flex items-center gap-3 w-full">
+                                <Avatar className="w-8 h-8">
+                                  <AvatarImage
+                                    src={user.avatar || '/placeholder.svg'}
+                                    alt={user.firstName}
+                                  />
+                                  <AvatarFallback>
+                                    {user.firstName?.[0]}
+                                    {user.lastName?.[0]}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium">
+                                    {user.firstName} {user.lastName}
+                                  </div>
+                                  <div className="text-sm text-gray-500">{user.email}</div>
+                                  {user.jobTitle && user.company && (
+                                    <div className="text-xs text-gray-400">
+                                      {user.jobTitle} at {user.company}
+                                    </div>
+                                  )}
+                                </div>
+                                <Badge variant="outline" className="ml-2">
+                                  {user.role?.name}
+                                </Badge>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {selectedUser && (
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-12 h-12">
+                      <AvatarImage
+                        src={selectedUser.avatar || '/placeholder.svg'}
+                        alt={selectedUser.firstName}
+                      />
+                      <AvatarFallback>
+                        {selectedUser.firstName?.[0]}
+                        {selectedUser.lastName?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h4 className="font-medium">
+                        {selectedUser.firstName} {selectedUser.lastName}
+                      </h4>
+                      <p className="text-sm text-gray-500">{selectedUser.email}</p>
+                      {selectedUser.jobTitle && selectedUser.company && (
+                        <p className="text-xs text-gray-400">
+                          {selectedUser.jobTitle} at {selectedUser.company}
+                        </p>
+                      )}
                     </div>
-                  ))}
-                  <Separator />
+                  </div>
                 </div>
               )}
-
-              {/* Add New Speaker */}
-              <div className="space-y-4 p-4 border-2 border-dashed border-gray-200 rounded-lg">
-                <h4 className="font-medium">Add Speaker</h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Name *</Label>
-                    <Input
-                      placeholder="Speaker name"
-                      value={newSpeaker.name || ''}
-                      onChange={e => setNewSpeaker({ ...newSpeaker, name: e.target.value })}
-                      className="starboard-input"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Email *</Label>
-                    <Input
-                      type="email"
-                      placeholder="speaker@email.com"
-                      value={newSpeaker.email || ''}
-                      onChange={e => setNewSpeaker({ ...newSpeaker, email: e.target.value })}
-                      className="starboard-input"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Company</Label>
-                    <Input
-                      placeholder="Company name"
-                      value={newSpeaker.company || ''}
-                      onChange={e => setNewSpeaker({ ...newSpeaker, company: e.target.value })}
-                      className="starboard-input"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Job Title</Label>
-                    <Input
-                      placeholder="Job title"
-                      value={newSpeaker.jobTitle || ''}
-                      onChange={e => setNewSpeaker({ ...newSpeaker, jobTitle: e.target.value })}
-                      className="starboard-input"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Role</Label>
-                  <Select
-                    value={newSpeaker.role}
-                    onValueChange={value => setNewSpeaker({ ...newSpeaker, role: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select speaker role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SPEAKER">Speaker</SelectItem>
-                      <SelectItem value="HOST">Host</SelectItem>
-                      <SelectItem value="MODERATOR">Moderator</SelectItem>
-                      <SelectItem value="PANELIST">Panelist</SelectItem>
-                      <SelectItem value="KEYNOTE">Keynote</SelectItem>
-                      <SelectItem value="FACILITATOR">Facilitator</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Bio</Label>
-                  <Textarea
-                    placeholder="Speaker biography..."
-                    value={newSpeaker.bio || ''}
-                    onChange={e => setNewSpeaker({ ...newSpeaker, bio: e.target.value })}
-                    className="starboard-input"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>External Speaker</Label>
-                    <p className="text-sm text-gray-500">Not a workspace member</p>
-                  </div>
-                  <Switch
-                    checked={newSpeaker.isExternal}
-                    onCheckedChange={checked =>
-                      setNewSpeaker({ ...newSpeaker, isExternal: checked })
+            </div>
+          ) : (
+            /* External Speaker Form */
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    placeholder="Speaker name"
+                    value={externalSpeakerData.name}
+                    onChange={e =>
+                      setExternalSpeakerData(prev => ({ ...prev, name: e.target.value }))
                     }
                   />
                 </div>
-
-                <Button type="button" onClick={addSpeaker} className="w-full starboard-button">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Speaker
-                </Button>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="speaker@example.com"
+                    value={externalSpeakerData.email}
+                    onChange={e =>
+                      setExternalSpeakerData(prev => ({ ...prev, email: e.target.value }))
+                    }
+                  />
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
 
-      {/* Form Actions */}
-      <div className="flex justify-end gap-3 pt-6 border-t">
-        <Button type="button" variant="outline" onClick={() => onSuccess?.()}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isSubmitting} className="starboard-button">
-          {isSubmitting ? (
-            <>
-              <Clock className="w-4 h-4 mr-2 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Event
-            </>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="jobTitle">Job Title</Label>
+                  <Input
+                    id="jobTitle"
+                    placeholder="CEO, CTO, etc."
+                    value={externalSpeakerData.jobTitle}
+                    onChange={e =>
+                      setExternalSpeakerData(prev => ({ ...prev, jobTitle: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="company">Company</Label>
+                  <Input
+                    id="company"
+                    placeholder="Company name"
+                    value={externalSpeakerData.company}
+                    onChange={e =>
+                      setExternalSpeakerData(prev => ({ ...prev, company: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="bio">Bio</Label>
+                <Textarea
+                  id="bio"
+                  placeholder="Speaker bio and background..."
+                  rows={3}
+                  value={externalSpeakerData.bio}
+                  onChange={e => setExternalSpeakerData(prev => ({ ...prev, bio: e.target.value }))}
+                />
+              </div>
+            </div>
           )}
-        </Button>
-      </div>
-    </form>
+
+          {/* Speaker Role */}
+          <div>
+            <Label htmlFor="role">Speaker Role</Label>
+            <Select
+              value={externalSpeakerData.role}
+              onValueChange={value => setExternalSpeakerData(prev => ({ ...prev, role: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                {SPEAKER_ROLES.map(role => (
+                  <SelectItem key={role.value} value={role.value}>
+                    {role.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleAddSpeaker}
+              disabled={speakerType === 'internal' && !selectedUser}
+              className="flex-1"
+            >
+              Add Speaker
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

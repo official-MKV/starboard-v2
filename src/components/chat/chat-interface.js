@@ -42,7 +42,7 @@ export default function ChatInterface() {
       setUser(session.user)
 
       // Load workspace members
-      const membersResponse = await fetch('/api/workspace/members')
+      const membersResponse = await fetch('/api/workspaces/members')
       const membersData = await membersResponse.json()
       setWorkspaceMembers(membersData.members || [])
 

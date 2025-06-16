@@ -128,7 +128,7 @@ export default async function ApplicationDetailPage({ params }) {
 
   return (
     <div className="min-h-screen bg-snow-100">
-      <div className="pl-64">
+      <div className="">
         <DashboardHeader
           title={application.title}
           description={`Created by ${application.creator.firstName} ${

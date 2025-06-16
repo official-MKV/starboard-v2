@@ -52,7 +52,7 @@ export async function GET(request) {
       where.createdAt = { lt: new Date(cursor) }
     }
 
-    const messages = await prisma.chatMessage.findMany({
+    const messages = await prisma.message.findMany({
       where,
       include: {
         sender: {
@@ -132,7 +132,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Receiver not in workspace' }, { status: 403 })
     }
 
-    const message = await prisma.chatMessage.create({
+    const message = await prisma.message.create({
       data: {
         receiverId,
         senderId: session.user.id,

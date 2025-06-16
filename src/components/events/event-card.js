@@ -93,10 +93,10 @@ export function EventCard({ event }) {
   }
 
   return (
-    <Card className="starboard-card group hover:shadow-lg transition-all duration-200">
+    <Card className="starboard-card group hover:shadow-lg transition-all duration-200 w-full">
       <CardHeader className="pb-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-2 flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge className={`${eventType.color} border`}>{eventType.label}</Badge>
               <Badge variant="outline" className={status.color}>
@@ -109,16 +109,23 @@ export function EventCard({ event }) {
               )}
             </div>
 
-            <Link href={`/events/${event.id}`}>
-              <h3 className="font-semibold text-lg text-gray-900 hover:text-primary transition-colors cursor-pointer truncate-with-tooltip">
-                {event.title}
-              </h3>
+            <Link href={`/events/${event.id}`} className="block">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <h3 className="font-semibold text-lg text-gray-900 hover:text-primary transition-colors cursor-pointer truncate">
+                    {event.title}
+                  </h3>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>{event.title}</p>
+                </TooltipContent>
+              </Tooltip>
             </Link>
 
             {event.description && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <p className="text-sm text-gray-600 line-clamp-2 truncate-with-tooltip">
+                  <p className="text-sm text-gray-600 line-clamp-2 overflow-hidden">
                     {event.description}
                   </p>
                 </TooltipTrigger>
@@ -129,57 +136,59 @@ export function EventCard({ event }) {
             )}
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem asChild>
-                <Link href={`/events/${event.id}`}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  View Details
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/events/${event.id}/edit`}>
-                  <Edit className="w-4 h-4 mr-2" />
-                  Edit Event
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleCopyLink}>
-                <Copy className="w-4 h-4 mr-2" />
-                Copy Link
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/events/${event.id}/registrations`}>
-                  <UserCheck className="w-4 h-4 mr-2" />
-                  Manage Registrations
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                {isDeleting ? 'Deleting...' : 'Delete Event'}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex-shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href={`/events/${event.id}`}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Details
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/events/${event.id}/edit`}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Event
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleCopyLink}>
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy Link
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/events/${event.id}/registrations`}>
+                    <UserCheck className="w-4 h-4 mr-2" />
+                    Manage Registrations
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {isDeleting ? 'Deleting...' : 'Delete Event'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
+        <div className="flex items-center gap-2 text-sm text-gray-600 min-w-0">
           <Calendar className="w-4 h-4 flex-shrink-0" />
-          <span>
+          <span className="truncate">
             {format(startDate, 'MMM d, yyyy')} at {format(startDate, 'h:mm a')}
             {!format(startDate, 'MMM d, yyyy').includes(format(endDate, 'MMM d, yyyy')) && (
               <>
@@ -196,13 +205,13 @@ export function EventCard({ event }) {
         </div>
 
         {(event.location || event.virtualLink) && (
-          <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="flex items-center gap-2 text-sm text-gray-600 min-w-0">
             {event.virtualLink ? (
               <Video className="w-4 h-4 flex-shrink-0" />
             ) : (
               <MapPin className="w-4 h-4 flex-shrink-0" />
             )}
-            <span className="truncate-with-tooltip">
+            <span className="truncate">
               {event.virtualLink ? 'Virtual Meeting' : event.location}
             </span>
           </div>

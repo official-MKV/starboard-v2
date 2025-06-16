@@ -21,9 +21,9 @@ export default async function ApplicationsPage() {
 
   return (
     <div className="min-h-screen bg-snow-100">
-      <DashboardNav user={user} />
+      {/* <DashboardNav user={user} /> */}
 
-      <div className="pl-64">
+      <div className="">
         <DashboardHeader
           title="Applications"
           description="Manage accelerator applications and review submissions"

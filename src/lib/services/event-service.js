@@ -13,12 +13,16 @@ export class EventService {
     try {
       const { speakers = [], resources = [], accessRules = [], ...baseEventData } = eventData
 
+      // Remove requireApproval if it exists in the data
+      delete baseEventData.requireApproval
+
       return await prisma.$transaction(async tx => {
         // Create Zoom meeting if virtual
         let zoomMeetingId = null
         let meetingPassword = null
+        let virtualLink = null
 
-        if (baseEventData.virtualLink && baseEventData.isVirtual) {
+        if (baseEventData.isVirtual) {
           try {
             const zoomMeeting = await ZoomService.createMeeting({
               topic: baseEventData.title,
@@ -26,6 +30,7 @@ export class EventService {
               duration: Math.ceil(
                 (new Date(baseEventData.endDate) - new Date(baseEventData.startDate)) / (1000 * 60)
               ),
+              timezone: baseEventData.timezone || 'UTC',
               settings: {
                 waiting_room: baseEventData.waitingRoom,
                 auto_recording: baseEventData.autoRecord ? 'cloud' : 'none',
@@ -36,10 +41,15 @@ export class EventService {
 
             zoomMeetingId = zoomMeeting.id
             meetingPassword = zoomMeeting.password
-            baseEventData.virtualLink = zoomMeeting.join_url
+            virtualLink = zoomMeeting.join_url
+
+            logger.info('Zoom meeting created for event', {
+              eventTitle: baseEventData.title,
+              zoomMeetingId,
+              joinUrl: virtualLink,
+            })
           } catch (zoomError) {
             logger.warn('Failed to create Zoom meeting', { error: zoomError.message })
-            // Continue without Zoom integration
           }
         }
 
@@ -47,6 +57,7 @@ export class EventService {
         const event = await tx.event.create({
           data: {
             ...baseEventData,
+            virtualLink,
             workspaceId,
             creatorId,
             zoomMeetingId,
@@ -92,7 +103,76 @@ export class EventService {
           hasZoomMeeting: !!zoomMeetingId,
         })
 
-        return this.findById(event.id)
+        // Return the created event with relations
+        return await tx.event.findUnique({
+          where: { id: event.id },
+          include: {
+            creator: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                avatar: true,
+              },
+            },
+            workspace: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+              },
+            },
+            speakers: {
+              orderBy: { order: 'asc' },
+            },
+            registrations: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    avatar: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+            resources: {
+              include: {
+                resource: true,
+              },
+            },
+            accessRules: true,
+            recordings: {
+              where: { isPublic: true },
+              orderBy: { createdAt: 'desc' },
+            },
+            waitlist: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    avatar: true,
+                  },
+                },
+              },
+              orderBy: { position: 'asc' },
+            },
+            reminders: {
+              where: { isSent: false },
+            },
+            _count: {
+              select: {
+                registrations: true,
+                speakers: true,
+                waitlist: true,
+              },
+            },
+          },
+        })
       })
     } catch (error) {
       logger.error('Failed to create event', { error: error.message, workspaceId, creatorId })
@@ -302,25 +382,90 @@ export class EventService {
           throw new Error('Event not found')
         }
 
-        // Update Zoom meeting if needed
-        if (baseEventData.virtualLink && existingEvent.zoomMeetingId) {
+        let virtualLink = baseEventData.virtualLink || existingEvent.virtualLink
+        let zoomMeetingId = existingEvent.zoomMeetingId
+        let meetingPassword = existingEvent.meetingPassword
+
+        // Handle Zoom meeting updates
+        if (baseEventData.isVirtual) {
+          if (existingEvent.zoomMeetingId) {
+            // Update existing Zoom meeting
+            try {
+              await ZoomService.updateMeeting(existingEvent.zoomMeetingId, {
+                topic: baseEventData.title,
+                start_time: baseEventData.startDate,
+                duration: Math.ceil(
+                  (new Date(baseEventData.endDate) - new Date(baseEventData.startDate)) /
+                    (1000 * 60)
+                ),
+                timezone: baseEventData.timezone || 'UTC',
+                settings: {
+                  waiting_room: baseEventData.waitingRoom,
+                  auto_recording: baseEventData.autoRecord ? 'cloud' : 'none',
+                },
+              })
+
+              logger.info('Zoom meeting updated', { zoomMeetingId: existingEvent.zoomMeetingId })
+            } catch (zoomError) {
+              logger.warn('Failed to update Zoom meeting', { error: zoomError.message })
+            }
+          } else if (!existingEvent.zoomMeetingId && !virtualLink) {
+            // Create new Zoom meeting if switching to virtual
+            try {
+              const zoomMeeting = await ZoomService.createMeeting({
+                topic: baseEventData.title,
+                start_time: baseEventData.startDate,
+                duration: Math.ceil(
+                  (new Date(baseEventData.endDate) - new Date(baseEventData.startDate)) /
+                    (1000 * 60)
+                ),
+                timezone: baseEventData.timezone || 'UTC',
+                settings: {
+                  waiting_room: baseEventData.waitingRoom,
+                  auto_recording: baseEventData.autoRecord ? 'cloud' : 'none',
+                  join_before_host: false,
+                  mute_upon_entry: true,
+                },
+              })
+
+              zoomMeetingId = zoomMeeting.id
+              meetingPassword = zoomMeeting.password
+              virtualLink = zoomMeeting.join_url
+
+              logger.info('New Zoom meeting created for updated event', {
+                eventId,
+                zoomMeetingId,
+              })
+            } catch (zoomError) {
+              logger.warn('Failed to create new Zoom meeting', { error: zoomError.message })
+            }
+          }
+        } else if (!baseEventData.isVirtual && existingEvent.zoomMeetingId) {
+          // Delete Zoom meeting if switching from virtual to physical
           try {
-            await ZoomService.updateMeeting(existingEvent.zoomMeetingId, {
-              topic: baseEventData.title,
-              start_time: baseEventData.startDate,
-              duration: Math.ceil(
-                (new Date(baseEventData.endDate) - new Date(baseEventData.startDate)) / (1000 * 60)
-              ),
+            await ZoomService.deleteMeeting(existingEvent.zoomMeetingId)
+            zoomMeetingId = null
+            meetingPassword = null
+            virtualLink = null
+
+            logger.info('Zoom meeting deleted for event switch to physical', {
+              eventId,
+              deletedZoomMeetingId: existingEvent.zoomMeetingId,
             })
           } catch (zoomError) {
-            logger.warn('Failed to update Zoom meeting', { error: zoomError.message })
+            logger.warn('Failed to delete Zoom meeting', { error: zoomError.message })
           }
         }
 
         // Update the event
         const updatedEvent = await tx.event.update({
           where: { id: eventId },
-          data: baseEventData,
+          data: {
+            ...baseEventData,
+            virtualLink,
+            zoomMeetingId,
+            meetingPassword,
+          },
         })
 
         // Update speakers
@@ -375,6 +520,7 @@ export class EventService {
         if (event.zoomMeetingId) {
           try {
             await ZoomService.deleteMeeting(event.zoomMeetingId)
+            logger.info('Zoom meeting deleted', { zoomMeetingId: event.zoomMeetingId })
           } catch (zoomError) {
             logger.warn('Failed to delete Zoom meeting', { error: zoomError.message })
           }

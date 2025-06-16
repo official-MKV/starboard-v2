@@ -131,7 +131,6 @@ export default function InviteUsersForm({ isOpen, onClose, onSuccess, roles = []
       },
     }))
 
-    // Clear error for this field
     if (variableErrors[variableName]) {
       setVariableErrors(prev => {
         const newErrors = { ...prev }

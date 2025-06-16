@@ -21,12 +21,10 @@ export class InvitationService {
    */
   static async create(workspaceId, invitationData, invitedBy) {
     try {
-      // Validate input
       if (!invitationData.email || !invitationData.roleId) {
         throw new Error('Email and role are required')
       }
 
-      // Check if user is already invited or member
       const existingInvitation = await prisma.userInvitation.findFirst({
         where: {
           workspaceId,
@@ -40,7 +38,6 @@ export class InvitationService {
         throw new Error('User already has a pending invitation')
       }
 
-      // Check if user is already a member
       const existingMember = await prisma.user.findUnique({
         where: { email: invitationData.email.toLowerCase() },
         include: {
@@ -54,7 +51,6 @@ export class InvitationService {
         throw new Error('User is already a member of this workspace')
       }
 
-      // Get role with onboarding flow and find role-specific email template
       const role = await prisma.role.findUnique({
         where: { id: invitationData.roleId },
         include: {
@@ -67,18 +63,16 @@ export class InvitationService {
         throw new Error('Role not found')
       }
 
-      // FIXED: Look for role-specific email template first
       let emailTemplate = await prisma.emailTemplate.findFirst({
         where: {
           workspaceId,
           type: 'INVITATION',
           isActive: true,
-          name: { contains: role.name }, // Look for role-specific template
+          name: { contains: role.name },
         },
-        orderBy: { createdAt: 'desc' }, // Get the most recent one
+        orderBy: { createdAt: 'desc' },
       })
 
-      // If no role-specific template, fall back to default
       if (!emailTemplate) {
         emailTemplate = await prisma.emailTemplate.findFirst({
           where: {
@@ -90,7 +84,6 @@ export class InvitationService {
         })
       }
 
-      // Get inviter info
       const inviter = await prisma.user.findUnique({
         where: { id: invitedBy },
         select: {
@@ -104,18 +97,16 @@ export class InvitationService {
         throw new Error('Inviter not found')
       }
 
-      // Generate unique token and set expiry
       const token = generateId(32)
       const expiresAt = new Date()
-      expiresAt.setDate(expiresAt.getDate() + 7) // 7 days expiry
+      expiresAt.setDate(expiresAt.getDate() + 7)
 
-      // Create invitation - FIXED to include templateId
       const invitation = await prisma.userInvitation.create({
         data: {
           workspaceId,
           email: invitationData.email.toLowerCase(),
           roleId: invitationData.roleId,
-          templateId: emailTemplate?.id || null, // FIXED: Link to specific template
+          templateId: emailTemplate?.id || null,
           token,
           expiresAt,
           variableData: invitationData.variableData || {},
@@ -134,7 +125,6 @@ export class InvitationService {
         },
       })
 
-      // Send invitation email with the specific template
       await this.sendInvitationEmail(invitation, inviter, invitationData.variableData || {})
 
       logger.info('Workspace invitation created', {
@@ -239,22 +229,8 @@ export class InvitationService {
    */
   static async sendInvitationEmail(invitation, inviter, variableData = {}) {
     try {
-      // FIXED: Use the linked template first
       let template = invitation.template
 
-      // If no linked template, fall back to finding one
-      if (!template) {
-        template = await prisma.emailTemplate.findFirst({
-          where: {
-            workspaceId: invitation.workspaceId,
-            type: 'INVITATION',
-            isActive: true,
-          },
-          orderBy: { isDefault: 'desc' },
-        })
-      }
-
-      // Fall back to system default template
       if (!template) {
         template = {
           subject: "You're invited to join {{workspace_name}}",
@@ -291,7 +267,8 @@ The {{workspace_name}} Team`,
         ...variableData, // Override with provided data
       }
 
-      // Send the email using EmailService
+      console.log(templateVariables)
+
       try {
         await EmailService.sendTemplatedEmail(template, templateVariables, invitation.email)
 

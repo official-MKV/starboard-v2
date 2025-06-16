@@ -1,4 +1,3 @@
-// app/(dashboard)/events/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -38,10 +37,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { CreateEventForm } from '@/components/events/create-event-form'
 import { EventCard } from '@/components/events/event-card'
 import { EventTable } from '@/components/events/event-table'
+import { EventsCalendar } from '@/components/events/events-calendar'
+import { EventsEmptyState } from '@/components/events/events-empty-state'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { EmptyState } from '@/components/ui/empty-state'
 import { PermissionWrapper } from '../permissionWrapper'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
 const EVENT_TYPES = [
@@ -59,10 +60,12 @@ export default function EventsPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
 
   // State management
   const [viewMode, setViewMode] = useState(searchParams.get('view') || 'grid')
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [editingEventId, setEditingEventId] = useState(null)
   const [selectedFilters, setSelectedFilters] = useState({
     search: searchParams.get('search') || '',
     type: searchParams.get('type') || 'all',
@@ -132,8 +135,39 @@ export default function EventsPage() {
   // Handle event creation success
   const handleEventCreated = () => {
     setIsCreateDialogOpen(false)
+    setEditingEventId(null)
     refetch()
-    toast.success('Event created successfully')
+    toast.success(editingEventId ? 'Event updated successfully' : 'Event created successfully')
+  }
+
+  // Handle edit event
+  const handleEditEvent = eventId => {
+    setEditingEventId(eventId)
+    setIsCreateDialogOpen(true)
+  }
+
+  // Handle delete event
+  const handleDeleteEvent = eventId => {
+    // Handled by the components themselves
+    refetch()
+  }
+
+  // Handle clear filters
+  const handleClearFilters = () => {
+    const clearedFilters = {
+      search: '',
+      type: 'all',
+      status: 'all',
+      date: 'all',
+    }
+    setSelectedFilters(clearedFilters)
+    updateUrlParams(clearedFilters)
+  }
+
+  // Handle create event from calendar
+  const handleCreateEventFromDate = date => {
+    // You can pre-populate the form with the selected date
+    setIsCreateDialogOpen(true)
   }
 
   const events = eventsData?.data?.events || []
@@ -142,6 +176,26 @@ export default function EventsPage() {
     upcoming: 0,
     ongoing: 0,
     completed: 0,
+  }
+
+  // Determine empty state type
+  const getEmptyStateType = () => {
+    if (
+      events.length === 0 &&
+      selectedFilters.search === '' &&
+      selectedFilters.type === 'all' &&
+      selectedFilters.status === 'all' &&
+      selectedFilters.date === 'all'
+    ) {
+      return 'no-events'
+    }
+    if (selectedFilters.status === 'upcoming') {
+      return 'no-upcoming'
+    }
+    if (selectedFilters.status === 'completed') {
+      return 'no-completed'
+    }
+    return 'no-results'
   }
 
   if (error) {
@@ -178,9 +232,16 @@ export default function EventsPage() {
               </DialogTrigger>
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Create New Event</DialogTitle>
+                  <DialogTitle>{editingEventId ? 'Edit Event' : 'Create New Event'}</DialogTitle>
                 </DialogHeader>
-                <CreateEventForm onSuccess={handleEventCreated} />
+                <CreateEventForm
+                  eventId={editingEventId}
+                  onSuccess={handleEventCreated}
+                  onCancel={() => {
+                    setIsCreateDialogOpen(false)
+                    setEditingEventId(null)
+                  }}
+                />
               </DialogContent>
             </Dialog>
           </PermissionWrapper>
@@ -225,135 +286,174 @@ export default function EventsPage() {
           </Card>
         </div>
 
-        {/* Filters and Controls */}
-        <Card className="starboard-card">
-          <CardContent className="p-6">
-            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-              {/* Search and Filters */}
-              <div className="flex flex-col sm:flex-row gap-4 flex-1">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    placeholder="Search events..."
-                    value={selectedFilters.search}
-                    onChange={e => handleFilterChange('search', e.target.value)}
-                    className="starboard-input pl-10"
-                  />
-                </div>
+        {/* View Tabs */}
+        <Tabs value={viewMode} onValueChange={handleViewModeChange} className="space-y-6">
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+            <TabsList className="grid w-full lg:w-auto grid-cols-3">
+              <TabsTrigger value="grid" className="flex items-center gap-2">
+                <Grid className="w-4 h-4" />
+                Grid
+              </TabsTrigger>
+              <TabsTrigger value="list" className="flex items-center gap-2">
+                <List className="w-4 h-4" />
+                List
+              </TabsTrigger>
+              <TabsTrigger value="calendar" className="flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                Calendar
+              </TabsTrigger>
+            </TabsList>
 
-                <Select
-                  value={selectedFilters.type}
-                  onValueChange={value => handleFilterChange('type', value)}
-                >
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder="Event Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    {EVENT_TYPES.map(type => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {/* Filters - Hide on calendar view */}
+            {viewMode !== 'calendar' && (
+              <Card className="starboard-card w-full lg:w-auto">
+                <CardContent className="p-4">
+                  <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                    {/* Search */}
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Search events..."
+                        value={selectedFilters.search}
+                        onChange={e => handleFilterChange('search', e.target.value)}
+                        className="starboard-input pl-10"
+                      />
+                    </div>
 
-                <Select
-                  value={selectedFilters.status}
-                  onValueChange={value => handleFilterChange('status', value)}
-                >
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="upcoming">Upcoming</SelectItem>
-                    <SelectItem value="ongoing">Ongoing</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
+                    {/* Filters */}
+                    <div className="flex flex-wrap gap-2">
+                      <Select
+                        value={selectedFilters.type}
+                        onValueChange={value => handleFilterChange('type', value)}
+                      >
+                        <SelectTrigger className="w-full sm:w-[140px]">
+                          <SelectValue placeholder="Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          {EVENT_TYPES.map(type => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
-                <Select
-                  value={selectedFilters.date}
-                  onValueChange={value => handleFilterChange('date', value)}
-                >
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder="Time Period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Time</SelectItem>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="week">This Week</SelectItem>
-                    <SelectItem value="month">This Month</SelectItem>
-                    <SelectItem value="quarter">This Quarter</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                      <Select
+                        value={selectedFilters.status}
+                        onValueChange={value => handleFilterChange('status', value)}
+                      >
+                        <SelectTrigger className="w-full sm:w-[140px]">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="upcoming">Upcoming</SelectItem>
+                          <SelectItem value="ongoing">Ongoing</SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                        </SelectContent>
+                      </Select>
 
-              {/* View Controls */}
-              <div className="flex items-center gap-2">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={viewMode === 'grid' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handleViewModeChange('grid')}
-                    >
-                      <Grid className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Grid View</TooltipContent>
-                </Tooltip>
+                      <Select
+                        value={selectedFilters.date}
+                        onValueChange={value => handleFilterChange('date', value)}
+                      >
+                        <SelectTrigger className="w-full sm:w-[140px]">
+                          <SelectValue placeholder="Period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Time</SelectItem>
+                          <SelectItem value="today">Today</SelectItem>
+                          <SelectItem value="week">This Week</SelectItem>
+                          <SelectItem value="month">This Month</SelectItem>
+                          <SelectItem value="quarter">This Quarter</SelectItem>
+                        </SelectContent>
+                      </Select>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={viewMode === 'list' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handleViewModeChange('list')}
-                    >
-                      <List className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>List View</TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Events Content */}
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <LoadingSpinner size="lg" />
-          </div>
-        ) : events.length === 0 ? (
-          <EmptyState
-            icon={Calendar}
-            title="No events found"
-            description="Create your first event to get started with your accelerator program."
-            action={
-              <PermissionWrapper permission="events.manage">
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Event
-                </Button>
-              </PermissionWrapper>
-            }
-          />
-        ) : (
-          <div className="space-y-6">
-            {viewMode === 'grid' ? (
-              <div className="starboard-grid-responsive">
-                {events.map(event => (
-                  <EventCard key={event.id} event={event} />
-                ))}
-              </div>
-            ) : (
-              <EventTable events={events} />
+                      {/* Clear Filters Button */}
+                      {(selectedFilters.search ||
+                        selectedFilters.type !== 'all' ||
+                        selectedFilters.status !== 'all' ||
+                        selectedFilters.date !== 'all') && (
+                        <Button variant="outline" size="sm" onClick={handleClearFilters}>
+                          <Filter className="w-4 h-4 mr-2" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
-        )}
+
+          {/* Grid View */}
+          <TabsContent value="grid" className="mt-6">
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <LoadingSpinner size="lg" />
+              </div>
+            ) : events.length === 0 ? (
+              <EventsEmptyState
+                type={getEmptyStateType()}
+                onCreateEvent={() => setIsCreateDialogOpen(true)}
+                onClearFilters={handleClearFilters}
+                searchQuery={selectedFilters.search}
+              />
+            ) : (
+              <div className="starboard-grid-responsive">
+                {events.map(event => (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    currentUserId={session?.user?.id}
+                    onEdit={handleEditEvent}
+                    onDelete={handleDeleteEvent}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* List View */}
+          <TabsContent value="list" className="mt-6">
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <LoadingSpinner size="lg" />
+              </div>
+            ) : events.length === 0 ? (
+              <EventsEmptyState
+                type={getEmptyStateType()}
+                onCreateEvent={() => setIsCreateDialogOpen(true)}
+                onClearFilters={handleClearFilters}
+                searchQuery={selectedFilters.search}
+              />
+            ) : (
+              <EventTable
+                events={events}
+                currentUserId={session?.user?.id}
+                onEdit={handleEditEvent}
+                onDelete={handleDeleteEvent}
+              />
+            )}
+          </TabsContent>
+
+          {/* Calendar View */}
+          <TabsContent value="calendar" className="mt-6">
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <LoadingSpinner size="lg" />
+              </div>
+            ) : (
+              <EventsCalendar
+                events={events}
+                onEventClick={event => router.push(`/events/${event.id}`)}
+                onDateClick={() => {}} // Optional: handle date clicks
+                onCreateEvent={handleCreateEventFromDate}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </TooltipProvider>
   )

@@ -169,7 +169,7 @@ async function markMessageAsRead(userId, messageId) {
     })
 
     // Get message details to notify sender
-    const message = await prisma.chatMessage.findUnique({
+    const message = await prisma.message.findUnique({
       where: { id: messageId },
       select: { senderId: true, receiverId: true },
     })

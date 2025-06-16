@@ -1,3 +1,7 @@
+import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/database'
+import { WorkspaceContext } from '@/lib/workspace-context'
 export async function GET(request) {
   try {
     const session = await auth()
@@ -34,7 +38,7 @@ export async function GET(request) {
       ]
     }
 
-    const messages = await prisma.chatMessage.findMany({
+    const messages = await prisma.message.findMany({
       where,
       include: {
         sender: {

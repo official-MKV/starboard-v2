@@ -1,3 +1,4 @@
+// app/api/events/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
@@ -6,7 +7,7 @@ import { logger } from '@/lib/logger'
 
 /**
  * GET /api/events
- * Get all events for current workspace with filters
+ * Get events for current workspace with filters
  */
 export async function GET(request) {
   try {
@@ -15,7 +16,7 @@ export async function GET(request) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context
+    // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
       return NextResponse.json(
@@ -39,29 +40,31 @@ export async function GET(request) {
     }
 
     // Parse query parameters
-    const url = new URL(request.url)
+    const { searchParams } = new URL(request.url)
     const filters = {
-      search: url.searchParams.get('search') || '',
-      type: url.searchParams.get('type') || 'all',
-      status: url.searchParams.get('status') || 'all',
-      date: url.searchParams.get('date') || 'all',
-      page: parseInt(url.searchParams.get('page')) || 1,
-      limit: parseInt(url.searchParams.get('limit')) || 50,
+      search: searchParams.get('search') || '',
+      type: searchParams.get('type') || 'all',
+      status: searchParams.get('status') || 'all',
+      date: searchParams.get('date') || 'all',
+      isPublic: searchParams.get('isPublic'),
+      creatorId: searchParams.get('creatorId'),
+      page: parseInt(searchParams.get('page')) || 1,
+      limit: parseInt(searchParams.get('limit')) || 50,
     }
 
-    // Get events
-    const result = await EventService.findByWorkspace(workspaceContext.workspaceId, filters)
+    // Get events for workspace
+    const eventsData = await EventService.findByWorkspace(workspaceContext.workspaceId, filters)
 
     logger.info('Events fetched', {
       workspaceId: workspaceContext.workspaceId,
       userId: session.user.id,
-      filters,
-      eventCount: result.events.length,
+      eventCount: eventsData.events.length,
+      filters: JSON.stringify(filters),
     })
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: eventsData,
     })
   } catch (error) {
     logger.error('Error fetching events', { error: error.message })
@@ -83,7 +86,7 @@ export async function POST(request) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context
+    // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
       return NextResponse.json(
@@ -116,19 +119,22 @@ export async function POST(request) {
       endDate,
       location,
       virtualLink,
+      isVirtual,
       isPublic,
       maxAttendees,
-      requireApproval,
+      bannerImage,
       waitingRoom,
-      isRecorded,
       autoRecord,
-      meetingPassword,
+      requireApproval,
       agenda,
       instructions,
       tags,
       speakers,
       accessRules,
       resources,
+      timezone,
+      isRecurring,
+      recurringRule,
     } = body
 
     // Validate required fields
@@ -136,32 +142,17 @@ export async function POST(request) {
       return NextResponse.json({ error: { message: 'Event title is required' } }, { status: 400 })
     }
 
-    if (!startDate || !endDate) {
-      return NextResponse.json(
-        { error: { message: 'Start and end dates are required' } },
-        { status: 400 }
-      )
+    if (!startDate) {
+      return NextResponse.json({ error: { message: 'Start date is required' } }, { status: 400 })
     }
 
-    if (new Date(endDate) <= new Date(startDate)) {
+    if (!endDate) {
+      return NextResponse.json({ error: { message: 'End date is required' } }, { status: 400 })
+    }
+
+    if (new Date(startDate) >= new Date(endDate)) {
       return NextResponse.json(
         { error: { message: 'End date must be after start date' } },
-        { status: 400 }
-      )
-    }
-
-    // Validate virtual meeting requirements
-    const isVirtual = !!virtualLink
-    if (isVirtual && !virtualLink) {
-      return NextResponse.json(
-        { error: { message: 'Virtual link is required for virtual events' } },
-        { status: 400 }
-      )
-    }
-
-    if (!isVirtual && !location) {
-      return NextResponse.json(
-        { error: { message: 'Location is required for in-person events' } },
         { status: 400 }
       )
     }
@@ -173,21 +164,26 @@ export async function POST(request) {
       type: type || 'WORKSHOP',
       startDate: new Date(startDate),
       endDate: new Date(endDate),
-      location: isVirtual ? null : location?.trim(),
-      virtualLink: isVirtual ? virtualLink.trim() : null,
+      location: location?.trim() || null,
+      isVirtual: Boolean(isVirtual),
       isPublic: Boolean(isPublic),
       maxAttendees: maxAttendees ? parseInt(maxAttendees) : null,
-      requireApproval: Boolean(requireApproval),
+      bannerImage: bannerImage?.trim() || null,
       waitingRoom: Boolean(waitingRoom),
-      isRecorded: Boolean(isRecorded),
       autoRecord: Boolean(autoRecord),
-      meetingPassword: meetingPassword?.trim() || null,
+      requireApproval: Boolean(requireApproval),
       agenda: agenda?.trim() || null,
       instructions: instructions?.trim() || null,
-      tags: tags || [],
-      speakers: speakers || [],
-      accessRules: accessRules || [],
-      resources: resources || [],
+      tags: Array.isArray(tags) ? tags.filter(tag => tag?.trim()) : [],
+      timezone: timezone || 'UTC',
+      isRecurring: Boolean(isRecurring),
+      recurringRule: isRecurring ? recurringRule : null,
+      speakers: Array.isArray(speakers) ? speakers : [],
+      accessRules: Array.isArray(accessRules) ? accessRules : [],
+      resources: Array.isArray(resources) ? resources : [],
+
+      // Virtual meeting will be handled in the service
+      virtualLink: null, // This will be set by the service if virtual
     }
 
     // Create the event
@@ -202,6 +198,8 @@ export async function POST(request) {
       eventTitle: event.title,
       workspaceId: workspaceContext.workspaceId,
       userId: session.user.id,
+      isPublic: event.isPublic,
+      isVirtual: event.virtualLink ? true : false,
     })
 
     return NextResponse.json({
