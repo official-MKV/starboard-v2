@@ -344,16 +344,20 @@ export function CreateEventForm({ eventId, onSuccess, onCancel }) {
     },
   ]
 
+  const { formState } = form
+
   const canGoNext = () => {
+    const values = getValues()
+
     switch (currentStep) {
       case 0:
-        return !!getValues('title')
+        return true
       case 1:
-        return !!getValues('startDate') && !!getValues('endDate')
+        return !!values.startDate && !!values.endDate
       case 2:
-        return true // Speakers are optional
+        return true
       case 3:
-        return true // Access rules have defaults
+        return true
       default:
         return false
     }
