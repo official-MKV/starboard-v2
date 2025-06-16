@@ -347,7 +347,7 @@ export function CreateEventForm({ eventId, onSuccess, onCancel }) {
   const canGoNext = () => {
     switch (currentStep) {
       case 0:
-        return !!getValues('title') && !!getValues('type')
+        return !!getValues('title')
       case 1:
         return !!getValues('startDate') && !!getValues('endDate')
       case 2:
