@@ -344,8 +344,6 @@ export function CreateEventForm({ eventId, onSuccess, onCancel }) {
     },
   ]
 
-  const { formState } = form
-
   const canGoNext = () => {
     const values = getValues()
 
@@ -891,7 +889,6 @@ export function CreateEventForm({ eventId, onSuccess, onCancel }) {
   )
 }
 
-// FIXED: Enhanced Add Speaker Dialog Component with PROPER form handling
 function AddSpeakerDialog({ open, onOpenChange, onAdd }) {
   const [speakerType, setSpeakerType] = useState('internal')
   const [selectedUser, setSelectedUser] = useState(null)
@@ -906,45 +903,38 @@ function AddSpeakerDialog({ open, onOpenChange, onAdd }) {
     role: 'SPEAKER',
   })
 
-  // Debounced search term
   const debouncedSearchTerm = useDebounce(localSearchTerm, 300)
 
-  // Mock users data for demonstration
-  const mockUsers = [
-    {
-      id: '1',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john@example.com',
-      avatar: '/avatars/john.jpg',
-      company: 'Tech Corp',
-      jobTitle: 'Senior Developer',
-      role: { name: 'Developer' },
-    },
-    {
-      id: '2',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      email: 'jane@example.com',
-      avatar: '/avatars/jane.jpg',
-      company: 'Design Studio',
-      jobTitle: 'UX Designer',
-      role: { name: 'Designer' },
-    },
-  ]
+  const {
+    data: workspaceMembers,
+    isLoading: isLoadingMembers,
+    error: membersError,
+  } = useQuery({
+    queryKey: ['workspace-members'],
+    queryFn: async () => {
+      const response = await fetch('/api/workspaces/members')
 
-  // Filter users based on search
+      if (!response.ok) {
+        throw new Error('Failed to fetch workspace members')
+      }
+      return response.json()
+    },
+    enabled: open && speakerType === 'internal',
+  })
+
   const filteredUsers = useMemo(() => {
-    if (!localSearchTerm) return mockUsers
+    const members = workspaceMembers?.members || []
+
+    if (!localSearchTerm) return members
 
     const search = localSearchTerm.toLowerCase()
-    return mockUsers.filter(
-      user =>
-        `${user.firstName} ${user.lastName}`.toLowerCase().includes(search) ||
-        user.email.toLowerCase().includes(search) ||
-        user.role?.name.toLowerCase().includes(search)
+    return members.filter(
+      member =>
+        `${member.user.firstName} ${member.user.lastName}`.toLowerCase().includes(search) ||
+        member.user.email.toLowerCase().includes(search) ||
+        member.role?.name.toLowerCase().includes(search)
     )
-  }, [localSearchTerm])
+  }, [workspaceMembers?.members, localSearchTerm]) // FIXED: Changed from workspaceMembers?.data
 
   // FIXED: Handle speaker addition WITHOUT form submission
   const handleAddSpeaker = async () => {
@@ -956,12 +946,12 @@ function AddSpeakerDialog({ open, onOpenChange, onAdd }) {
         }
 
         const speaker = {
-          userId: selectedUser.id,
-          name: `${selectedUser.firstName} ${selectedUser.lastName}`,
-          email: selectedUser.email,
-          avatar: selectedUser.avatar,
-          company: selectedUser.company,
-          jobTitle: selectedUser.jobTitle,
+          userId: selectedUser.user.id, // FIXED: Access through .user
+          name: `${selectedUser.user.firstName} ${selectedUser.user.lastName}`, // FIXED: Access through .user
+          email: selectedUser.user.email, // FIXED: Access through .user
+          avatar: selectedUser.user.avatar, // FIXED: Access through .user
+          company: selectedUser.user.company, // FIXED: Access through .user
+          jobTitle: selectedUser.user.jobTitle, // FIXED: Access through .user
           role: externalSpeakerData.role,
           isExternal: false,
           isConfirmed: true,
@@ -1070,20 +1060,27 @@ function AddSpeakerDialog({ open, onOpenChange, onAdd }) {
                       role="combobox"
                       aria-expanded={userSearchOpen}
                       className="w-full justify-between"
+                      disabled={isLoadingMembers}
                     >
-                      {selectedUser ? (
+                      {isLoadingMembers ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading members...
+                        </div>
+                      ) : selectedUser ? (
                         <div className="flex items-center gap-2">
                           <Avatar className="w-6 h-6">
                             <AvatarImage
-                              src={selectedUser.avatar || '/placeholder.svg'}
-                              alt={selectedUser.firstName}
+                              src={selectedUser.user.avatar || '/placeholder.svg'} // FIXED: Access through .user
+                              alt={selectedUser.user.firstName} // FIXED: Access through .user
                             />
                             <AvatarFallback>
-                              {selectedUser.firstName?.[0]}
-                              {selectedUser.lastName?.[0]}
+                              {selectedUser.user.firstName?.[0]} {/* FIXED: Access through .user */}
+                              {selectedUser.user.lastName?.[0]} {/* FIXED: Access through .user */}
                             </AvatarFallback>
                           </Avatar>
-                          {selectedUser.firstName} {selectedUser.lastName}
+                          {selectedUser.user.firstName} {selectedUser.user.lastName}{' '}
+                          {/* FIXED: Access through .user */}
                         </div>
                       ) : (
                         'Select a workspace member...'
@@ -1098,46 +1095,69 @@ function AddSpeakerDialog({ open, onOpenChange, onAdd }) {
                         onValueChange={setLocalSearchTerm}
                       />
                       <CommandList>
-                        <CommandEmpty>No users found.</CommandEmpty>
-                        <CommandGroup className="max-h-64 overflow-auto">
-                          {filteredUsers?.map(user => (
-                            <CommandItem
-                              key={user.id}
-                              value={`${user.firstName} ${user.lastName} ${user.email}`}
-                              onSelect={() => {
-                                setSelectedUser(user)
-                                setUserSearchOpen(false)
-                              }}
-                            >
-                              <div className="flex items-center gap-3 w-full">
-                                <Avatar className="w-8 h-8">
-                                  <AvatarImage
-                                    src={user.avatar || '/placeholder.svg'}
-                                    alt={user.firstName}
-                                  />
-                                  <AvatarFallback>
-                                    {user.firstName?.[0]}
-                                    {user.lastName?.[0]}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium">
-                                    {user.firstName} {user.lastName}
-                                  </div>
-                                  <div className="text-sm text-gray-500">{user.email}</div>
-                                  {user.jobTitle && user.company && (
-                                    <div className="text-xs text-gray-400">
-                                      {user.jobTitle} at {user.company}
+                        {isLoadingMembers ? (
+                          <div className="flex items-center justify-center py-6">
+                            <Loader2 className="w-6 h-6 animate-spin" />
+                          </div>
+                        ) : membersError ? (
+                          <div className="flex items-center justify-center py-6 text-red-500">
+                            Error loading members
+                          </div>
+                        ) : filteredUsers?.length === 0 ? (
+                          <CommandEmpty>No users found.</CommandEmpty>
+                        ) : (
+                          <CommandGroup className="max-h-64 overflow-auto">
+                            {filteredUsers?.map(
+                              (
+                                member // FIXED: Renamed parameter to 'member' for clarity
+                              ) => (
+                                <CommandItem
+                                  key={member.id}
+                                  value={`${member.user.firstName} ${member.user.lastName} ${member.user.email}`} // FIXED: Access through .user
+                                  onSelect={() => {
+                                    setSelectedUser(member)
+                                    setUserSearchOpen(false)
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3 w-full">
+                                    <Avatar className="w-8 h-8">
+                                      <AvatarImage
+                                        src={member.user.avatar || '/placeholder.svg'} // FIXED: Access through .user
+                                        alt={member.user.firstName} // FIXED: Access through .user
+                                      />
+                                      <AvatarFallback>
+                                        {member.user.firstName?.[0]}{' '}
+                                        {/* FIXED: Access through .user */}
+                                        {member.user.lastName?.[0]}{' '}
+                                        {/* FIXED: Access through .user */}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium">
+                                        {member.user.firstName} {member.user.lastName}{' '}
+                                        {/* FIXED: Access through .user */}
+                                      </div>
+                                      <div className="text-sm text-gray-500">
+                                        {member.user.email}
+                                      </div>{' '}
+                                      {/* FIXED: Access through .user */}
+                                      {member.user.jobTitle &&
+                                        member.user.company && ( // FIXED: Access through .user
+                                          <div className="text-xs text-gray-400">
+                                            {member.user.jobTitle} at {member.user.company}{' '}
+                                            {/* FIXED: Access through .user */}
+                                          </div>
+                                        )}
                                     </div>
-                                  )}
-                                </div>
-                                <Badge variant="outline" className="ml-2">
-                                  {user.role?.name}
-                                </Badge>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
+                                    <Badge variant="outline" className="ml-2">
+                                      {member.role?.name}
+                                    </Badge>
+                                  </div>
+                                </CommandItem>
+                              )
+                            )}
+                          </CommandGroup>
+                        )}
                       </CommandList>
                     </Command>
                   </PopoverContent>
@@ -1149,24 +1169,28 @@ function AddSpeakerDialog({ open, onOpenChange, onAdd }) {
                   <div className="flex items-center gap-3">
                     <Avatar className="w-12 h-12">
                       <AvatarImage
-                        src={selectedUser.avatar || '/placeholder.svg'}
-                        alt={selectedUser.firstName}
+                        src={selectedUser.user.avatar || '/placeholder.svg'} // FIXED: Access through .user
+                        alt={selectedUser.user.firstName} // FIXED: Access through .user
                       />
                       <AvatarFallback>
-                        {selectedUser.firstName?.[0]}
-                        {selectedUser.lastName?.[0]}
+                        {selectedUser.user.firstName?.[0]} {/* FIXED: Access through .user */}
+                        {selectedUser.user.lastName?.[0]} {/* FIXED: Access through .user */}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <h4 className="font-medium">
-                        {selectedUser.firstName} {selectedUser.lastName}
+                        {selectedUser.user.firstName} {selectedUser.user.lastName}{' '}
+                        {/* FIXED: Access through .user */}
                       </h4>
-                      <p className="text-sm text-gray-500">{selectedUser.email}</p>
-                      {selectedUser.jobTitle && selectedUser.company && (
-                        <p className="text-xs text-gray-400">
-                          {selectedUser.jobTitle} at {selectedUser.company}
-                        </p>
-                      )}
+                      <p className="text-sm text-gray-500">{selectedUser.user.email}</p>{' '}
+                      {/* FIXED: Access through .user */}
+                      {selectedUser.user.jobTitle &&
+                        selectedUser.user.company && ( // FIXED: Access through .user
+                          <p className="text-xs text-gray-400">
+                            {selectedUser.user.jobTitle} at {selectedUser.user.company}{' '}
+                            {/* FIXED: Access through .user */}
+                          </p>
+                        )}
                     </div>
                   </div>
                 </div>
