@@ -70,6 +70,7 @@ export async function GET(request, { params }) {
         lastActiveAt: true,
         createdAt: true,
         updatedAt: true,
+        profileData: true,
         // Include workspace membership if checking permissions
         ...(isOwnProfile
           ? {}
@@ -115,10 +116,6 @@ export async function GET(request, { params }) {
   }
 }
 
-/**
- * PUT /api/users/[userId]
- * Update a specific user's profile
- */
 export async function PUT(request, { params }) {
   try {
     const session = await auth()
@@ -129,7 +126,6 @@ export async function PUT(request, { params }) {
     const { userId } = params
     const isOwnProfile = session.user.id === userId
 
-    // Users can edit their own profile, or need admin permissions to edit others
     if (!isOwnProfile) {
       const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
       if (!workspaceContext) {
@@ -168,6 +164,8 @@ export async function PUT(request, { params }) {
       twitter,
       timezone,
       language,
+      avatar,
+      profileData,
     } = body
 
     // Validate required fields
@@ -194,6 +192,7 @@ export async function PUT(request, { params }) {
     const updateData = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
+      avatar: avatar?.trim() || null,
       phone: phone?.trim() || null,
       bio: bio?.trim() || null,
       location: location?.trim() || null,
@@ -205,6 +204,11 @@ export async function PUT(request, { params }) {
       timezone: timezone || 'UTC',
       language: language || 'en',
       updatedAt: new Date(),
+    }
+
+    // Handle profileData if provided
+    if (profileData !== undefined) {
+      updateData.profileData = profileData
     }
 
     // Update user
@@ -227,6 +231,7 @@ export async function PUT(request, { params }) {
         twitter: true,
         timezone: true,
         language: true,
+        profileData: true,
         updatedAt: true,
       },
     })

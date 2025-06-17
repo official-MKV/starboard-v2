@@ -49,7 +49,7 @@ export async function GET(request) {
         })
 
         // Get the latest message
-        const latestMessage = await prisma.chatMessage.findFirst({
+        const latestMessage = await prisma.message.findFirst({
           where: {
             OR: [
               { senderId: session.user.id, receiverId: conv.other_user_id },
