@@ -23,7 +23,6 @@ export async function GET(request) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
       return NextResponse.json(
@@ -32,7 +31,6 @@ export async function GET(request) {
       )
     }
 
-    // Check permissions
     const hasPermission = await WorkspaceContext.hasAnyPermission(
       session.user.id,
       workspaceContext.workspaceId,
@@ -46,50 +44,35 @@ export async function GET(request) {
       )
     }
 
-    // Get URL search params for filtering and pagination
     const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status') // PENDING, ACCEPTED, EXPIRED, CANCELLED
+    const status = searchParams.get('status')
     const roleId = searchParams.get('roleId')
+    const search = searchParams.get('search') || ''
     const page = parseInt(searchParams.get('page')) || 1
     const limit = parseInt(searchParams.get('limit')) || 20
     const offset = (page - 1) * limit
 
-    // Validate pagination parameters
-    if (page < 1) {
-      return NextResponse.json(
-        { error: { message: 'Page must be greater than 0' } },
-        { status: 400 }
-      )
-    }
-
-    if (limit < 1 || limit > 100) {
-      return NextResponse.json(
-        { error: { message: 'Limit must be between 1 and 100' } },
-        { status: 400 }
-      )
-    }
-
-    // Get invitations and total count for workspace
+    // FIXED: Get both invitations and count
     const [rawInvitations, totalCount] = await Promise.all([
       InvitationService.findByWorkspace(workspaceContext.workspaceId, {
         status,
         roleId,
+        search,
         limit,
         offset,
       }),
       InvitationService.countByWorkspace(workspaceContext.workspaceId, {
         status,
         roleId,
+        search,
       }),
     ])
 
-    // Compute status for each invitation and add it to the response
     const invitations = rawInvitations.map(invitation => ({
       ...invitation,
       status: computeInvitationStatus(invitation),
     }))
 
-    // Calculate pagination metadata
     const totalPages = Math.ceil(totalCount / limit)
     const hasNextPage = page < totalPages
     const hasPreviousPage = page > 1
@@ -97,23 +80,15 @@ export async function GET(request) {
     const pagination = {
       currentPage: page,
       totalPages,
-      totalItems: totalCount,
+      totalItems: totalCount, // This was missing!
       itemsPerPage: limit,
       hasNextPage,
       hasPreviousPage,
       nextPage: hasNextPage ? page + 1 : null,
       previousPage: hasPreviousPage ? page - 1 : null,
-      startIndex: offset + 1,
+      startIndex: totalCount > 0 ? offset + 1 : 0,
       endIndex: Math.min(offset + limit, totalCount),
     }
-
-    logger.info('Invitations fetched', {
-      workspaceId: workspaceContext.workspaceId,
-      userId: session.user.id,
-      invitationCount: invitations.length,
-      filters: { status, roleId },
-      pagination: { page, limit, totalCount, totalPages },
-    })
 
     return NextResponse.json({
       success: true,
@@ -123,14 +98,12 @@ export async function GET(request) {
       },
     })
   } catch (error) {
-    logger.error('Error fetching invitations', { error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to fetch invitations' } },
       { status: 500 }
     )
   }
 }
-
 export async function POST(request) {
   try {
     const session = await auth()

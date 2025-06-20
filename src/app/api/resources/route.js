@@ -58,7 +58,7 @@ export async function GET(request) {
 
     // Get resources
     const result = await ResourceService.findByWorkspace(workspaceContext.workspaceId, filters)
-
+    console.log(result)
     logger.info('Resources fetched', {
       workspaceId: workspaceContext.workspaceId,
       userId: session.user.id,

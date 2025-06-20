@@ -267,8 +267,6 @@ The {{workspace_name}} Team`,
         ...variableData, // Override with provided data
       }
 
-      console.log(templateVariables)
-
       try {
         await EmailService.sendTemplatedEmail(template, templateVariables, invitation.email)
 
@@ -298,8 +296,40 @@ The {{workspace_name}} Team`,
   }
 
   /**
-   * CORRECTED - Fixed method name and implementation
+   * Count invitations by workspace with filtering
    */
+  static async countByWorkspace(workspaceId, options = {}) {
+    try {
+      const { status = 'all', roleId = null, search = '' } = options
+
+      const where = {
+        workspaceId,
+        ...(roleId && { roleId }),
+        ...(search && {
+          email: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        }),
+      }
+
+      // Apply status filter
+      if (status === 'PENDING') {
+        where.isAccepted = false
+        where.expiresAt = { gt: new Date() }
+      } else if (status === 'ACCEPTED') {
+        where.isAccepted = true
+      } else if (status === 'EXPIRED') {
+        where.isAccepted = false
+        where.expiresAt = { lte: new Date() }
+      }
+
+      const count = await prisma.userInvitation.count({ where })
+      return count
+    } catch (error) {
+      throw handleDatabaseError(error)
+    }
+  }
   static async bulkCreate(options) {
     try {
       const {
@@ -716,14 +746,28 @@ The {{workspace_name}} Team`,
   /**
    * Resend invitation - CORRECTED model name
    */
-  static async resend(invitationId) {
+  /**
+   * Resend invitation with preserved template variables
+   */
+  static async resend(invitationId, options = {}) {
     try {
+      const { extendExpiry = false, resentBy } = options
+
+      // Get the invitation with ALL data including variableData
       const invitation = await prisma.userInvitation.findUnique({
         where: { id: invitationId },
         include: {
           workspace: true,
           role: true,
-          sender: true,
+          template: true,
+          sender: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
         },
       })
 
@@ -732,33 +776,54 @@ The {{workspace_name}} Team`,
       }
 
       if (invitation.isAccepted) {
-        throw new Error('Invitation already accepted')
+        throw new Error('Cannot resend accepted invitation')
       }
 
-      // Extend expiry
-      const newExpiresAt = new Date()
-      newExpiresAt.setDate(newExpiresAt.getDate() + 7)
+      // Calculate new expiry date if needed
+      let newExpiresAt = invitation.expiresAt
+      const isExpired = new Date() > new Date(invitation.expiresAt)
 
+      if (extendExpiry || isExpired) {
+        newExpiresAt = new Date()
+        newExpiresAt.setDate(newExpiresAt.getDate() + 7) // Extend by 7 days
+      }
+
+      // Get the resender's details if provided
+      let emailSender = invitation.sender
+      if (resentBy && resentBy !== invitation.sender?.id) {
+        const resender = await prisma.user.findUnique({
+          where: { id: resentBy },
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        })
+        if (resender) {
+          emailSender = resender
+        }
+      }
+
+      // Update the invitation with new expiry
       const updatedInvitation = await prisma.userInvitation.update({
         where: { id: invitationId },
         data: {
           expiresAt: newExpiresAt,
+          sentAt: new Date(),
         },
         include: {
           workspace: true,
           role: true,
-          sender: true,
+          template: true,
         },
       })
 
-      // Resend invitation email
-      await this.sendInvitationEmail(updatedInvitation, invitation.sender, invitation.variableData)
-
-      logger.info('Invitation resent', {
-        invitationId,
-        email: invitation.email,
-        newExpiresAt,
-      })
+      // Send the email using the ORIGINAL variableData
+      await this.sendInvitationEmail(
+        updatedInvitation,
+        emailSender,
+        invitation.variableData || {} // Use original variableData!
+      )
 
       return updatedInvitation
     } catch (error) {
@@ -1156,6 +1221,7 @@ export const {
   sendInvitationEmail,
   bulkCreate,
   getStatistics,
+  countByWorkspace,
 } = InvitationService
 
 export default InvitationService

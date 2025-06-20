@@ -245,7 +245,7 @@ export class ResourceService {
         page = 1,
         limit = 50,
       } = filters
-
+      console.log(workspaceId)
       const where = {
         workspaceId,
         ...(search && {
@@ -256,7 +256,7 @@ export class ResourceService {
           ],
         }),
         ...(type && type !== 'all' && { type }),
-        ...(category && { category }),
+        ...(category && category !== 'all' && { category }), // ← Fix this line
         ...(typeof isPublic === 'boolean' && { isPublic }),
         ...(creatorId && { creatorId }),
         ...(tags &&
