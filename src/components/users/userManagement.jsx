@@ -75,6 +75,9 @@ import {
   Save,
   X,
   RefreshCw,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react'
 
 import RoleManagement from './rolemanagement'
@@ -85,21 +88,43 @@ export default function UsersManagement() {
   const [activeTab, setActiveTab] = useState('users')
   const [isLoading, setIsLoading] = useState(true)
 
+  // Common state
+  const [roles, setRoles] = useState([])
+
   // Users state
   const [users, setUsers] = useState([])
-  const [roles, setRoles] = useState([])
-  const getInvitationStatus = invitation => {
-    if (invitation.isAccepted) {
-      return 'ACCEPTED'
-    } else if (new Date() > new Date(invitation.expiresAt)) {
-      return 'EXPIRED'
-    } else {
-      return 'PENDING'
-    }
-  }
+  const [usersPagination, setUsersPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 20,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  })
+  const [usersFilters, setUsersFilters] = useState({
+    search: '',
+    role: 'all',
+    status: 'all',
+    sortBy: 'name',
+    sortOrder: 'asc',
+  })
 
   // Invitations state
   const [invitations, setInvitations] = useState([])
+  const [invitationsPagination, setInvitationsPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 20,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  })
+  const [invitationsFilters, setInvitationsFilters] = useState({
+    search: '',
+    status: 'all',
+    sortBy: 'sentAt',
+    sortOrder: 'desc',
+  })
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
 
   // Email templates state
@@ -117,12 +142,6 @@ export default function UsersManagement() {
     totalTemplates: 0,
   })
 
-  const [filters, setFilters] = useState({
-    search: '',
-    role: 'all',
-    status: 'all',
-  })
-
   const [templateForm, setTemplateForm] = useState({
     name: '',
     description: '',
@@ -132,27 +151,90 @@ export default function UsersManagement() {
     isActive: true,
   })
 
+  // Helper functions
+  const getInvitationStatus = invitation => {
+    if (invitation.isAccepted) {
+      return 'ACCEPTED'
+    } else if (new Date() > new Date(invitation.expiresAt)) {
+      return 'EXPIRED'
+    } else {
+      return 'PENDING'
+    }
+  }
+
+  const getStatusBadge = status => {
+    const statusConfig = {
+      PENDING: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'Pending' },
+      ACCEPTED: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Accepted' },
+      EXPIRED: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Expired' },
+      CANCELLED: { color: 'bg-gray-100 text-gray-800', icon: XCircle, label: 'Cancelled' },
+    }
+
+    const config = statusConfig[status] || statusConfig.PENDING
+    const Icon = config.icon
+
+    return (
+      <Badge className={config.color}>
+        <Icon className="mr-1 h-3 w-3" />
+        {config.label}
+      </Badge>
+    )
+  }
+
+  // Fetch functions
   useEffect(() => {
-    fetchUsers()
     fetchRoles()
+    fetchUsers()
     fetchInvitations()
     fetchEmailTemplates()
     fetchStatistics()
   }, [])
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (page = 1) => {
     try {
       setIsLoading(true)
-      const response = await fetch('/api/users')
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: usersPagination.itemsPerPage.toString(),
+        ...(usersFilters.search && { search: usersFilters.search }),
+        ...(usersFilters.role !== 'all' && { role: usersFilters.role }),
+        ...(usersFilters.status !== 'all' && { status: usersFilters.status }),
+        sortBy: usersFilters.sortBy,
+        sortOrder: usersFilters.sortOrder,
+      })
+
+      const response = await fetch(`/api/users?${queryParams}`)
       if (response.ok) {
         const data = await response.json()
         setUsers(data.data.users)
+        setUsersPagination(data.data.pagination)
       }
     } catch (error) {
       console.error('Error fetching users:', error)
       toast.error('Failed to load users')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const fetchInvitations = async (page = 1) => {
+    try {
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: invitationsPagination.itemsPerPage.toString(),
+        ...(invitationsFilters.search && { search: invitationsFilters.search }),
+        ...(invitationsFilters.status !== 'all' && { status: invitationsFilters.status }),
+      })
+
+      const response = await fetch(`/api/invitations?${queryParams}`)
+      if (response.ok) {
+        const data = await response.json()
+        setInvitations(data.data.invitations)
+        setInvitationsPagination(data.data.pagination)
+      }
+    } catch (error) {
+      console.error('Error fetching invitations:', error)
+      toast.error('Failed to load invitations')
     }
   }
 
@@ -165,18 +247,6 @@ export default function UsersManagement() {
       }
     } catch (error) {
       console.error('Error fetching roles:', error)
-    }
-  }
-
-  const fetchInvitations = async () => {
-    try {
-      const response = await fetch('/api/invitations')
-      if (response.ok) {
-        const data = await response.json()
-        setInvitations(data.data.invitations)
-      }
-    } catch (error) {
-      console.error('Error fetching invitations:', error)
     }
   }
 
@@ -225,6 +295,160 @@ export default function UsersManagement() {
     }
   }
 
+  // Pagination handlers
+  const handleUsersPageChange = newPage => {
+    fetchUsers(newPage)
+  }
+
+  const handleUsersItemsPerPageChange = newLimit => {
+    setUsersPagination(prev => ({ ...prev, itemsPerPage: newLimit }))
+    fetchUsers(1) // Reset to first page
+  }
+
+  const handleInvitationsPageChange = newPage => {
+    fetchInvitations(newPage)
+  }
+
+  const handleInvitationsItemsPerPageChange = newLimit => {
+    setInvitationsPagination(prev => ({ ...prev, itemsPerPage: newLimit }))
+    fetchInvitations(1) // Reset to first page
+  }
+
+  // Filter handlers
+  const handleUsersFilterChange = (key, value) => {
+    setUsersFilters(prev => ({ ...prev, [key]: value }))
+    // Debounced fetch for search, immediate for others
+    if (key === 'search') {
+      const timeoutId = setTimeout(() => fetchUsers(1), 300)
+      return () => clearTimeout(timeoutId)
+    } else {
+      fetchUsers(1)
+    }
+  }
+
+  const handleInvitationsFilterChange = (key, value) => {
+    setInvitationsFilters(prev => ({ ...prev, [key]: value }))
+    if (key === 'search') {
+      const timeoutId = setTimeout(() => fetchInvitations(1), 300)
+      return () => clearTimeout(timeoutId)
+    } else {
+      fetchInvitations(1)
+    }
+  }
+
+  // Sorting handlers
+  const handleUsersSort = field => {
+    const newOrder =
+      usersFilters.sortBy === field && usersFilters.sortOrder === 'asc' ? 'desc' : 'asc'
+    setUsersFilters(prev => ({ ...prev, sortBy: field, sortOrder: newOrder }))
+    fetchUsers(1)
+  }
+
+  // Pagination Component
+  const PaginationComponent = ({ pagination, onPageChange, onItemsPerPageChange }) => (
+    <div className="flex items-center justify-between px-6 py-4 border-t">
+      <div className="flex items-center space-x-2 text-sm text-slate-gray-600">
+        <span>
+          Showing {pagination.startIndex || 1}-{pagination.endIndex || 0} of {pagination.totalItems}{' '}
+          items
+        </span>
+        <Select
+          value={pagination.itemsPerPage.toString()}
+          onValueChange={value => onItemsPerPageChange(parseInt(value))}
+        >
+          <SelectTrigger className="w-20">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="10">10</SelectItem>
+            <SelectItem value="20">20</SelectItem>
+            <SelectItem value="50">50</SelectItem>
+            <SelectItem value="100">100</SelectItem>
+          </SelectContent>
+        </Select>
+        <span>per page</span>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(1)}
+          disabled={!pagination.hasPreviousPage}
+        >
+          First
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(pagination.previousPage)}
+          disabled={!pagination.hasPreviousPage}
+        >
+          Previous
+        </Button>
+
+        <div className="flex items-center space-x-1">
+          {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+            const pageNumber = Math.max(1, pagination.currentPage - 2) + i
+            if (pageNumber > pagination.totalPages) return null
+
+            return (
+              <Button
+                key={pageNumber}
+                variant={pageNumber === pagination.currentPage ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => onPageChange(pageNumber)}
+                className="w-8 h-8 p-0"
+              >
+                {pageNumber}
+              </Button>
+            )
+          })}
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(pagination.nextPage)}
+          disabled={!pagination.hasNextPage}
+        >
+          Next
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(pagination.totalPages)}
+          disabled={!pagination.hasNextPage}
+        >
+          Last
+        </Button>
+      </div>
+    </div>
+  )
+
+  // Sortable header component
+  const SortableHeader = ({ field, currentSort, currentOrder, onSort, children }) => (
+    <Button
+      variant="ghost"
+      className="h-auto p-0 font-medium hover:bg-transparent"
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center space-x-1">
+        <span>{children}</span>
+        {currentSort === field ? (
+          currentOrder === 'asc' ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )
+        ) : (
+          <ArrowUpDown className="h-4 w-4 opacity-50" />
+        )}
+      </div>
+    </Button>
+  )
+
+  // Template handlers (keeping existing)
   const handleCreateTemplate = async () => {
     if (!templateForm.name.trim() || !templateForm.subject.trim() || !templateForm.content.trim()) {
       toast.error('Please fill in all required fields')
@@ -325,12 +549,21 @@ export default function UsersManagement() {
 
   const handleResendInvitation = async invitation => {
     try {
+      const isExpired = getInvitationStatus(invitation) === 'EXPIRED'
       const response = await fetch(`/api/invitations/${invitation.id}/resend`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          extendExpiry: isExpired,
+        }),
       })
 
       if (response.ok) {
-        toast.success('Invitation resent successfully')
+        toast.success(
+          isExpired ? 'Invitation resent with extended expiry' : 'Invitation resent successfully'
+        )
         fetchInvitations()
       } else {
         const error = await response.json()
@@ -391,54 +624,6 @@ export default function UsersManagement() {
     setIsTemplateDialogOpen(true)
   }
 
-  const getStatusBadge = status => {
-    const statusConfig = {
-      PENDING: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'Pending' },
-      ACCEPTED: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Accepted' },
-      EXPIRED: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Expired' },
-      CANCELLED: { color: 'bg-gray-100 text-gray-800', icon: XCircle, label: 'Cancelled' },
-    }
-
-    const config = statusConfig[status] || statusConfig.PENDING
-    const Icon = config.icon
-
-    return (
-      <Badge className={config.color}>
-        <Icon className="mr-1 h-3 w-3" />
-        {config.label}
-      </Badge>
-    )
-  }
-
-  const filteredUsers = users.filter(user => {
-    const matchesSearch =
-      user.firstName?.toLowerCase().includes(filters.search.toLowerCase()) ||
-      user.lastName?.toLowerCase().includes(filters.search.toLowerCase()) ||
-      user.email?.toLowerCase().includes(filters.search.toLowerCase())
-
-    const matchesRole = filters.role === 'all' || user.role?.name === filters.role
-    const matchesStatus =
-      filters.status === 'all' ||
-      (filters.status === 'active' && user.isActive) ||
-      (filters.status === 'inactive' && !user.isActive)
-
-    return matchesSearch && matchesRole && matchesStatus
-  })
-
-  const filteredInvitations = invitations.filter(invitation => {
-    return (
-      invitation.email?.toLowerCase().includes(filters.search.toLowerCase()) ||
-      invitation.role?.name?.toLowerCase().includes(filters.search.toLowerCase())
-    )
-  })
-
-  const filteredTemplates = emailTemplates.filter(template => {
-    return (
-      template.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
-      template.description?.toLowerCase().includes(filters.search.toLowerCase())
-    )
-  })
-
   const handleInviteSuccess = data => {
     fetchInvitations()
     fetchStatistics()
@@ -467,7 +652,6 @@ export default function UsersManagement() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
-            {/* Updated to use InviteUsersForm component */}
             <InviteUsersForm
               isOpen={isInviteDialogOpen}
               onClose={() => setIsInviteDialogOpen(false)}
@@ -554,15 +738,15 @@ export default function UsersManagement() {
                   <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-gray-400" />
                     <Input
-                      placeholder="Search users..."
-                      value={filters.search}
-                      onChange={e => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      placeholder="Search users by name, email, company..."
+                      value={usersFilters.search}
+                      onChange={e => handleUsersFilterChange('search', e.target.value)}
                       className="pl-9"
                     />
                   </div>
                   <Select
-                    value={filters.role}
-                    onValueChange={value => setFilters(prev => ({ ...prev, role: value }))}
+                    value={usersFilters.role}
+                    onValueChange={value => handleUsersFilterChange('role', value)}
                   >
                     <SelectTrigger className="w-40">
                       <SelectValue placeholder="All roles" />
@@ -577,8 +761,8 @@ export default function UsersManagement() {
                     </SelectContent>
                   </Select>
                   <Select
-                    value={filters.status}
-                    onValueChange={value => setFilters(prev => ({ ...prev, status: value }))}
+                    value={usersFilters.status}
+                    onValueChange={value => handleUsersFilterChange('status', value)}
                   >
                     <SelectTrigger className="w-32">
                       <SelectValue placeholder="All status" />
@@ -589,6 +773,14 @@ export default function UsersManagement() {
                       <SelectItem value="inactive">Inactive</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchUsers(1)}
+                    className="flex items-center space-x-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span>Refresh</span>
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -596,22 +788,46 @@ export default function UsersManagement() {
             {/* Users Table */}
             <Card className="starboard-card">
               <CardHeader>
-                <CardTitle>Users</CardTitle>
+                <CardTitle>Users ({usersPagination.totalItems})</CardTitle>
                 <CardDescription>Manage workspace users and their roles</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>User</TableHead>
+                      <TableHead>
+                        <SortableHeader
+                          field="name"
+                          currentSort={usersFilters.sortBy}
+                          currentOrder={usersFilters.sortOrder}
+                          onSort={handleUsersSort}
+                        >
+                          User
+                        </SortableHeader>
+                      </TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Joined</TableHead>
+                      <TableHead>
+                        <SortableHeader
+                          field="joinedAt"
+                          currentSort={usersFilters.sortBy}
+                          currentOrder={usersFilters.sortOrder}
+                          onSort={handleUsersSort}
+                        >
+                          Joined
+                        </SortableHeader>
+                      </TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.length === 0 ? (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : users.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8">
                           <div className="text-slate-gray-500">
@@ -621,7 +837,7 @@ export default function UsersManagement() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredUsers.map(user => (
+                      users.map(user => (
                         <TableRow key={user.id}>
                           <TableCell>
                             <div className="flex items-center space-x-3">
@@ -702,6 +918,11 @@ export default function UsersManagement() {
                     )}
                   </TableBody>
                 </Table>
+                <PaginationComponent
+                  pagination={usersPagination}
+                  onPageChange={handleUsersPageChange}
+                  onItemsPerPageChange={handleUsersItemsPerPageChange}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -711,21 +932,33 @@ export default function UsersManagement() {
             {/* Filters */}
             <Card className="starboard-card">
               <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4 flex-1">
-                    <div className="flex-1 relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-gray-400" />
-                      <Input
-                        placeholder="Search invitations..."
-                        value={filters.search}
-                        onChange={e => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                        className="pl-9"
-                      />
-                    </div>
+                <div className="flex items-center space-x-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-gray-400" />
+                    <Input
+                      placeholder="Search invitations by email..."
+                      value={invitationsFilters.search}
+                      onChange={e => handleInvitationsFilterChange('search', e.target.value)}
+                      className="pl-9"
+                    />
                   </div>
+                  <Select
+                    value={invitationsFilters.status}
+                    onValueChange={value => handleInvitationsFilterChange('status', value)}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue placeholder="All status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="PENDING">Pending</SelectItem>
+                      <SelectItem value="ACCEPTED">Accepted</SelectItem>
+                      <SelectItem value="EXPIRED">Expired</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button
                     variant="outline"
-                    onClick={fetchInvitations}
+                    onClick={() => fetchInvitations(1)}
                     className="flex items-center space-x-2"
                   >
                     <RefreshCw className="h-4 w-4" />
@@ -738,7 +971,7 @@ export default function UsersManagement() {
             {/* Invitations Table */}
             <Card className="starboard-card">
               <CardHeader>
-                <CardTitle>Pending Invitations</CardTitle>
+                <CardTitle>Invitations ({invitationsPagination.totalItems})</CardTitle>
                 <CardDescription>Manage sent invitations and track their status</CardDescription>
               </CardHeader>
               <CardContent>
@@ -754,7 +987,7 @@ export default function UsersManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInvitations.length === 0 ? (
+                    {invitations.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-8">
                           <div className="text-slate-gray-500">
@@ -764,7 +997,7 @@ export default function UsersManagement() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredInvitations.map(invitation => (
+                      invitations.map(invitation => (
                         <TableRow key={invitation.id}>
                           <TableCell>
                             <div className="font-medium">{invitation.email}</div>
@@ -781,7 +1014,7 @@ export default function UsersManagement() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <TableCell>{getStatusBadge(getInvitationStatus(invitation))}</TableCell>
+                            {getStatusBadge(invitation.status || getInvitationStatus(invitation))}
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
@@ -806,20 +1039,25 @@ export default function UsersManagement() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                {invitation.status === 'PENDING' && (
+                                {(getInvitationStatus(invitation) === 'PENDING' ||
+                                  getInvitationStatus(invitation) === 'EXPIRED') && (
                                   <>
                                     <DropdownMenuItem
                                       onClick={() => handleResendInvitation(invitation)}
                                     >
                                       <Send className="mr-2 h-4 w-4" />
-                                      Resend
+                                      {getInvitationStatus(invitation) === 'EXPIRED'
+                                        ? 'Resend (Extend)'
+                                        : 'Resend'}
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => handleCancelInvitation(invitation)}
-                                    >
-                                      <X className="mr-2 h-4 w-4" />
-                                      Cancel
-                                    </DropdownMenuItem>
+                                    {getInvitationStatus(invitation) === 'PENDING' && (
+                                      <DropdownMenuItem
+                                        onClick={() => handleCancelInvitation(invitation)}
+                                      >
+                                        <X className="mr-2 h-4 w-4" />
+                                        Cancel
+                                      </DropdownMenuItem>
+                                    )}
                                   </>
                                 )}
                                 <DropdownMenuItem>
@@ -834,6 +1072,11 @@ export default function UsersManagement() {
                     )}
                   </TableBody>
                 </Table>
+                <PaginationComponent
+                  pagination={invitationsPagination}
+                  onPageChange={handleInvitationsPageChange}
+                  onItemsPerPageChange={handleInvitationsItemsPerPageChange}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -843,7 +1086,7 @@ export default function UsersManagement() {
             <RoleManagement />
           </TabsContent>
 
-          {/* Email Templates Tab */}
+          {/* Email Templates Tab - keeping existing implementation */}
           <TabsContent value="templates" className="space-y-6">
             {/* Filters and Actions */}
             <Card className="starboard-card">
@@ -852,12 +1095,7 @@ export default function UsersManagement() {
                   <div className="flex items-center space-x-4 flex-1">
                     <div className="flex-1 relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-gray-400" />
-                      <Input
-                        placeholder="Search templates..."
-                        value={filters.search}
-                        onChange={e => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                        className="pl-9"
-                      />
+                      <Input placeholder="Search templates..." className="pl-9" />
                     </div>
                   </div>
                   <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
@@ -976,25 +1214,6 @@ The {{workspace_name}} Team`}
                           />
                           <Label htmlFor="templateActive">Template is active</Label>
                         </div>
-                        {/*
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <h4 className="font-medium mb-2">Available Variables</h4>
-                          <div className="text-xs text-slate-gray-600 space-y-1">
-                            <p>
-                              <code>{{ first_name }}</code> - Required variables (will cause error
-                              if missing)
-                            </p>
-                            <p>
-                              <code>{{ personal_message }}</code> - Optional variables (will be
-                              empty if not provided)
-                            </p>
-                            <p>
-                              <strong>Available:</strong> first_name, last_name, email,
-                              workspace_name, inviter_name, invitation_link, expiry_date,
-                              personal_message
-                            </p>
-                          </div>
-                        </div> */}
                       </div>
 
                       <DialogFooter>
@@ -1053,7 +1272,7 @@ The {{workspace_name}} Team`}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTemplates.length === 0 ? (
+                    {emailTemplates.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8">
                           <div className="text-slate-gray-500">
@@ -1063,7 +1282,7 @@ The {{workspace_name}} Team`}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredTemplates.map(template => (
+                      emailTemplates.map(template => (
                         <TableRow key={template.id}>
                           <TableCell>
                             <div>

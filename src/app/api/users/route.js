@@ -1,4 +1,4 @@
-// app/api/users/route.js - Enhanced version with search
+// app/api/users/route.js - Enhanced version with pagination and filtering
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
@@ -7,13 +7,15 @@ import { logger } from '@/lib/logger'
 
 /**
  * GET /api/users
- * Get all users for current workspace with optional search
+ * Get all users for current workspace with pagination, search, and filtering
  * Query params:
- * - search: string to search by name, email, or role
- * - role: filter by specific role ID
- * - active: boolean to filter by active status
- * - limit: number of results to return
- * - offset: pagination offset
+ * - page: page number (default: 1)
+ * - limit: number of results per page (default: 20, max: 100)
+ * - search: string to search by name, email, company, job title
+ * - role: filter by specific role name
+ * - status: filter by active status ('active', 'inactive', 'all')
+ * - sortBy: field to sort by ('name', 'email', 'joinedAt', 'lastLogin')
+ * - sortOrder: sort direction ('asc', 'desc')
  */
 export async function GET(request) {
   try {
@@ -44,13 +46,32 @@ export async function GET(request) {
       )
     }
 
-    // Parse query parameters
+    // Parse and validate query parameters
     const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page')) || 1
+    const limit = parseInt(searchParams.get('limit')) || 20
     const search = searchParams.get('search')?.trim()
     const roleFilter = searchParams.get('role')
-    const activeFilter = searchParams.get('active')
-    const limit = parseInt(searchParams.get('limit')) || 50
-    const offset = parseInt(searchParams.get('offset')) || 0
+    const statusFilter = searchParams.get('status')
+    const sortBy = searchParams.get('sortBy') || 'name'
+    const sortOrder = searchParams.get('sortOrder') || 'asc'
+
+    // Validate pagination parameters
+    if (page < 1) {
+      return NextResponse.json(
+        { error: { message: 'Page must be greater than 0' } },
+        { status: 400 }
+      )
+    }
+
+    if (limit < 1 || limit > 100) {
+      return NextResponse.json(
+        { error: { message: 'Limit must be between 1 and 100' } },
+        { status: 400 }
+      )
+    }
+
+    const offset = (page - 1) * limit
 
     // Build where clause
     const whereClause = {
@@ -58,13 +79,15 @@ export async function GET(request) {
     }
 
     // Add role filter
-    if (roleFilter) {
-      whereClause.roleId = roleFilter
+    if (roleFilter && roleFilter !== 'all') {
+      whereClause.role = {
+        name: roleFilter,
+      }
     }
 
-    // Add active filter
-    if (activeFilter !== null) {
-      whereClause.isActive = activeFilter === 'true'
+    // Add status filter
+    if (statusFilter && statusFilter !== 'all') {
+      whereClause.isActive = statusFilter === 'active'
     }
 
     // Add search filter
@@ -89,46 +112,66 @@ export async function GET(request) {
       ]
     }
 
-    // Get total count for pagination
-    const totalCount = await prisma.workspaceMember.count({
-      where: whereClause,
-    })
+    // Build order by clause
+    let orderBy = []
+    switch (sortBy) {
+      case 'name':
+        orderBy = [{ user: { firstName: sortOrder } }, { user: { lastName: sortOrder } }]
+        break
+      case 'email':
+        orderBy = [{ user: { email: sortOrder } }]
+        break
+      case 'joinedAt':
+        orderBy = [{ joinedAt: sortOrder }]
+        break
+      case 'lastLogin':
+        orderBy = [{ user: { lastLoginAt: sortOrder } }]
+        break
+      default:
+        orderBy = [{ isActive: 'desc' }, { user: { firstName: 'asc' } }, { joinedAt: 'desc' }]
+    }
 
-    // Get users for workspace
-    const users = await prisma.workspaceMember.findMany({
-      where: whereClause,
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            avatar: true,
-            company: true,
-            jobTitle: true,
-            bio: true,
-            phone: true,
-            isEmailVerified: true,
-            lastLoginAt: true,
-            createdAt: true,
+    // Get total count and users in parallel
+    const [totalCount, users] = await Promise.all([
+      prisma.workspaceMember.count({
+        where: whereClause,
+      }),
+      prisma.workspaceMember.findMany({
+        where: whereClause,
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              avatar: true,
+              company: true,
+              jobTitle: true,
+              bio: true,
+              phone: true,
+              isEmailVerified: true,
+              lastLoginAt: true,
+              createdAt: true,
+            },
+          },
+          role: {
+            select: {
+              id: true,
+              name: true,
+              color: true,
+              isDefault: true,
+              isSystem: true,
+            },
           },
         },
-        role: {
-          select: {
-            id: true,
-            name: true,
-            color: true,
-            isDefault: true,
-            isSystem: true,
-          },
-        },
-      },
-      orderBy: [{ isActive: 'desc' }, { user: { firstName: 'asc' } }, { joinedAt: 'desc' }],
-      take: limit,
-      skip: offset,
-    })
+        orderBy,
+        take: limit,
+        skip: offset,
+      }),
+    ])
 
+    // Transform users data
     const transformedUsers = users.map(member => ({
       id: member.user.id,
       firstName: member.user.firstName,
@@ -148,26 +191,37 @@ export async function GET(request) {
       workspaceMemberId: member.id,
     }))
 
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(totalCount / limit)
+    const hasNextPage = page < totalPages
+    const hasPreviousPage = page > 1
+
+    const pagination = {
+      currentPage: page,
+      totalPages,
+      totalItems: totalCount,
+      itemsPerPage: limit,
+      hasNextPage,
+      hasPreviousPage,
+      nextPage: hasNextPage ? page + 1 : null,
+      previousPage: hasPreviousPage ? page - 1 : null,
+      startIndex: offset + 1,
+      endIndex: Math.min(offset + limit, totalCount),
+    }
+
     logger.info('Users fetched', {
       workspaceId: workspaceContext.workspaceId,
       userId: session.user.id,
       userCount: transformedUsers.length,
-      totalCount,
-      search,
-      roleFilter,
-      activeFilter,
+      pagination: { page, limit, totalCount, totalPages },
+      filters: { search, roleFilter, statusFilter, sortBy, sortOrder },
     })
 
     return NextResponse.json({
       success: true,
       data: {
         users: transformedUsers,
-        pagination: {
-          total: totalCount,
-          limit,
-          offset,
-          hasMore: offset + limit < totalCount,
-        },
+        pagination,
       },
     })
   } catch (error) {
@@ -179,10 +233,7 @@ export async function GET(request) {
   }
 }
 
-/**
- * POST /api/users
- * Create a new user (admin only)
- */
+// Keep existing POST method unchanged
 export async function POST(request) {
   try {
     const session = await auth()
