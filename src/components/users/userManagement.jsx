@@ -88,6 +88,15 @@ export default function UsersManagement() {
   // Users state
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
+  const getInvitationStatus = invitation => {
+    if (invitation.isAccepted) {
+      return 'ACCEPTED'
+    } else if (new Date() > new Date(invitation.expiresAt)) {
+      return 'EXPIRED'
+    } else {
+      return 'PENDING'
+    }
+  }
 
   // Invitations state
   const [invitations, setInvitations] = useState([])
@@ -771,7 +780,9 @@ export default function UsersManagement() {
                               </div>
                             )}
                           </TableCell>
-                          <TableCell>{getStatusBadge(invitation.status)}</TableCell>
+                          <TableCell>
+                            <TableCell>{getStatusBadge(getInvitationStatus(invitation))}</TableCell>
+                          </TableCell>
                           <TableCell>
                             <div className="text-sm">
                               {invitation.expiresAt

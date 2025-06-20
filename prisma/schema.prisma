@@ -86,6 +86,8 @@ model User {
   lastLoginAt DateTime?
   lastActiveAt DateTime?
   isOnboardingCompleted Boolean @default(false)
+  sentTyping     TypingIndicator[] @relation("TypingSender")
+receivedTyping TypingIndicator[] @relation("TypingReceiver")
   onboardingCompletedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -805,7 +807,20 @@ model Message {
 
   @@map("messages")
 }
+model TypingIndicator {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  isTyping   Boolean  @default(true)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 
+  sender   User @relation("TypingSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("TypingReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@map("typing_indicators")
+}
 
 model MessageReaction {
   id        String   @id @default(cuid())

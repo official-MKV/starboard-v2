@@ -136,6 +136,7 @@ export async function POST(request) {
       data: {
         receiverId,
         senderId: session.user.id,
+        workspaceId: workspaceContext.workspaceId,
         content,
         type,
         fileUrl,

@@ -20,12 +20,14 @@ export default function ChatInterface() {
   const [workspaceMembers, setWorkspaceMembers] = useState([])
   const [activeConversation, setActiveConversation] = useState(null)
   const [messages, setMessages] = useState([])
+  const [conversationMessages, setConversationMessages] = useState({}) // Store messages per conversation
   const [newMessage, setNewMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [typingUsers, setTypingUsers] = useState([])
   const [ws, setWs] = useState(null)
   const [user, setUser] = useState(null)
   const [onlineUsers, setOnlineUsers] = useState(new Set())
+  const [connectionStatus, setConnectionStatus] = useState('disconnected') // Add connection status
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -33,57 +35,130 @@ export default function ChatInterface() {
   // Initialize WebSocket connection
   useEffect(() => {
     const initializeChat = async () => {
-      // Get user session and workspace
-      const sessionResponse = await fetch('/api/auth/session')
-      const session = await sessionResponse.json()
+      try {
+        // Get user session and workspace
+        const sessionResponse = await fetch('/api/auth/session')
+        const session = await sessionResponse.json()
 
-      if (!session?.user) return
+        if (!session?.user) {
+          console.error('No user session found')
+          return
+        }
 
-      setUser(session.user)
+        setUser(session.user)
+        console.log('User session loaded:', session.user)
 
-      // Load workspace members
-      const membersResponse = await fetch('/api/workspaces/members')
-      const membersData = await membersResponse.json()
-      setWorkspaceMembers(membersData.members || [])
+        // Load workspace members
+        const membersResponse = await fetch('/api/workspaces/members')
+        const membersData = await membersResponse.json()
+        setWorkspaceMembers(membersData.members || [])
+        console.log('Workspace members loaded:', membersData.members?.length)
 
-      // Connect WebSocket
-      const wsUrl = `ws://localhost:3000/api/chat/ws?token=${session.accessToken}`
-      const websocket = new WebSocket(wsUrl)
+        // Connect WebSocket with better error handling
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        const wsUrl = `${wsProtocol}//${window.location.host}/api/chat/ws?token=${session.accessToken}`
+        console.log('Connecting to WebSocket:', wsUrl)
 
-      websocket.onopen = () => {
-        console.log('WebSocket connected')
-        setWs(websocket)
-      }
+        const websocket = new WebSocket(wsUrl)
 
-      websocket.onmessage = event => {
-        const message = JSON.parse(event.data)
-        handleWebSocketMessage(message)
-      }
+        websocket.onopen = () => {
+          console.log('WebSocket connected successfully')
+          setWs(websocket)
+          setConnectionStatus('connected')
+        }
 
-      websocket.onclose = () => {
-        console.log('WebSocket disconnected')
-        setWs(null)
-      }
+        websocket.onmessage = event => {
+          try {
+            const message = JSON.parse(event.data)
+            console.log('WebSocket message received:', message)
+            handleWebSocketMessage(message)
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error)
+          }
+        }
 
-      return () => {
-        websocket.close()
+        websocket.onclose = event => {
+          console.log('WebSocket disconnected:', event.code, event.reason)
+          setWs(null)
+          setConnectionStatus('disconnected')
+
+          // Don't auto-reconnect if it was a normal close
+          if (event.code !== 1000) {
+            // Attempt to reconnect after 3 seconds
+            setTimeout(() => {
+              console.log('Attempting to reconnect...')
+              initializeChat()
+            }, 3000)
+          }
+        }
+
+        websocket.onerror = error => {
+          console.error('WebSocket error:', error)
+          setConnectionStatus('error')
+        }
+
+        return () => {
+          if (websocket.readyState === WebSocket.OPEN) {
+            websocket.close()
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing chat:', error)
       }
     }
 
     initializeChat()
   }, [])
 
-  // Handle WebSocket messages
+  // Handle WebSocket messages with better logging
   const handleWebSocketMessage = useCallback(
     message => {
       const { type, data } = message
+      console.log(`Handling WebSocket message type: ${type}`, data)
 
       switch (type) {
+        case 'connected':
+          console.log('WebSocket connection confirmed')
+          if (data.onlineUsers) {
+            setOnlineUsers(new Set(data.onlineUsers))
+          }
+          break
+
         case 'new_message':
-          // Only show if it's from current conversation
-          if (isMessageFromActiveConversation(data)) {
-            setMessages(prev => [...prev, data])
-            scrollToBottom()
+          console.log('New message received:', data)
+          // Always add the message if it involves the current user
+          if (data.senderId === user?.id || data.receiverId === user?.id) {
+            // Update current messages if this conversation is active
+            if (
+              (data.senderId === activeConversation?.id && data.receiverId === user?.id) ||
+              (data.senderId === user?.id && data.receiverId === activeConversation?.id)
+            ) {
+              setMessages(prev => {
+                const exists = prev.some(msg => msg.id === data.id)
+                if (!exists) {
+                  console.log('Adding message to current conversation')
+                  const updated = [...prev, data]
+                  setTimeout(scrollToBottom, 100)
+                  return updated
+                }
+                return prev
+              })
+            }
+
+            // Update conversation-specific storage
+            const otherUserId = data.senderId === user?.id ? data.receiverId : data.senderId
+            const conversationKey = [user.id, otherUserId].sort().join('-')
+            setConversationMessages(prev => {
+              const existingMessages = prev[conversationKey] || []
+              const exists = existingMessages.some(msg => msg.id === data.id)
+              if (!exists) {
+                return {
+                  ...prev,
+                  [conversationKey]: [...existingMessages, data],
+                }
+              }
+              return prev
+            })
           }
           break
 
@@ -116,33 +191,59 @@ export default function ChatInterface() {
             return newSet
           })
           break
+
+        case 'heartbeat':
+          // Respond to heartbeat
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'heartbeat_ack' }))
+          }
+          break
+
+        default:
+          console.log('Unknown message type:', type)
       }
     },
-    [activeConversation, user]
+    [activeConversation, user, ws]
   )
 
-  const isMessageFromActiveConversation = message => {
-    if (!activeConversation) return false
-
-    return (
-      (message.senderId === user?.id && message.receiverId === activeConversation.id) ||
-      (message.senderId === activeConversation.id && message.receiverId === user?.id)
-    )
-  }
-
-  // Load messages for active conversation
+  // Load messages for active conversation and update conversation-specific state
   useEffect(() => {
-    if (activeConversation && ws) {
-      loadMessages(activeConversation.id)
+    if (activeConversation && user) {
+      console.log('Loading messages for conversation:', activeConversation.id)
+
+      // Check if we already have messages for this conversation
+      const conversationKey = [user.id, activeConversation.id].sort().join('-')
+      if (conversationMessages[conversationKey]) {
+        setMessages(conversationMessages[conversationKey])
+        setTimeout(scrollToBottom, 100)
+      } else {
+        loadMessages(activeConversation.id)
+      }
     }
-  }, [activeConversation, ws])
+  }, [activeConversation, user])
 
   const loadMessages = async otherUserId => {
     try {
+      console.log('Fetching messages for user:', otherUserId)
       const response = await fetch(`/api/chat/messages?receiverId=${otherUserId}&limit=50`)
       const data = await response.json()
-      setMessages(data.messages || [])
-      scrollToBottom()
+
+      if (response.ok) {
+        console.log('Messages loaded:', data.messages?.length)
+        const newMessages = data.messages || []
+        setMessages(newMessages)
+
+        // Store in conversation-specific state
+        const conversationKey = [user.id, otherUserId].sort().join('-')
+        setConversationMessages(prev => ({
+          ...prev,
+          [conversationKey]: newMessages,
+        }))
+
+        setTimeout(scrollToBottom, 100)
+      } else {
+        console.error('Error loading messages:', data.error)
+      }
     } catch (error) {
       console.error('Error loading messages:', error)
     }
@@ -153,25 +254,58 @@ export default function ChatInterface() {
   }
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !activeConversation) return
+    if (!newMessage.trim() || !activeConversation) {
+      console.log('Cannot send message: empty content or no active conversation')
+      return
+    }
+
+    if (connectionStatus !== 'connected') {
+      console.log('Cannot send message: WebSocket not connected')
+      alert('Connection lost. Please wait for reconnection.')
+      return
+    }
+
+    const messageContent = newMessage.trim()
+    setNewMessage('') // Clear input immediately for better UX
+    stopTyping()
 
     try {
+      console.log('Sending message to:', activeConversation.id, 'Content:', messageContent)
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           receiverId: activeConversation.id,
-          content: newMessage,
+          content: messageContent,
           type: 'TEXT',
         }),
       })
 
-      if (response.ok) {
-        setNewMessage('')
-        stopTyping()
+      const data = await response.json()
+      console.log('API Response:', response.status, data)
+
+      if (!response.ok) {
+        console.error('Error sending message:', data.error)
+        alert(`Failed to send message: ${data.error}`)
+        // Restore message content if sending failed
+        setNewMessage(messageContent)
+      } else {
+        console.log('Message sent successfully:', data.message)
+        // Add message immediately to state for better UX (it will also come via WebSocket)
+        setMessages(prev => {
+          const exists = prev.some(msg => msg.id === data.message.id)
+          if (!exists) {
+            return [...prev, data.message]
+          }
+          return prev
+        })
+        setTimeout(scrollToBottom, 100)
       }
     } catch (error) {
       console.error('Error sending message:', error)
+      alert('Network error. Please check your connection.')
+      // Restore message content if sending failed
+      setNewMessage(messageContent)
     }
   }
 
@@ -183,7 +317,7 @@ export default function ChatInterface() {
   }
 
   const startTyping = () => {
-    if (!isTyping && ws && activeConversation) {
+    if (!isTyping && ws && activeConversation && ws.readyState === WebSocket.OPEN) {
       setIsTyping(true)
       ws.send(
         JSON.stringify({
@@ -195,7 +329,7 @@ export default function ChatInterface() {
   }
 
   const stopTyping = useCallback(() => {
-    if (isTyping && ws && activeConversation) {
+    if (isTyping && ws && activeConversation && ws.readyState === WebSocket.OPEN) {
       setIsTyping(false)
       ws.send(
         JSON.stringify({
@@ -290,8 +424,22 @@ export default function ChatInterface() {
   )
 
   const getLastMessage = memberId => {
-    // This would typically come from a separate API call for conversation previews
-    return 'Click to start chatting...'
+    // Get conversation key and find messages for this conversation
+    const conversationKey = [user?.id, memberId].sort().join('-')
+    const conversationMsgs = conversationMessages[conversationKey] || []
+
+    if (conversationMsgs.length === 0) {
+      return 'Click to start chatting...'
+    }
+
+    const lastMessage = conversationMsgs[conversationMsgs.length - 1]
+    if (lastMessage.type === 'IMAGE') return '📷 Image'
+    if (lastMessage.type === 'FILE') return '📎 File'
+    if (lastMessage.type === 'ZOOM_LINK') return '🎥 Video call'
+
+    return lastMessage.content.length > 50
+      ? `${lastMessage.content.substring(0, 50)}...`
+      : lastMessage.content
   }
 
   const isOnline = userId => onlineUsers.has(userId)
@@ -301,7 +449,22 @@ export default function ChatInterface() {
       {/* Sidebar - Workspace Members */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Messages</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
+            {/* Connection Status Indicator */}
+            <div className="flex items-center space-x-2">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'connected'
+                    ? 'bg-green-500'
+                    : connectionStatus === 'error'
+                      ? 'bg-red-500'
+                      : 'bg-yellow-500'
+                }`}
+              ></div>
+              <span className="text-xs text-gray-500 capitalize">{connectionStatus}</span>
+            </div>
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <input
@@ -413,14 +576,34 @@ export default function ChatInterface() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((message, index) => (
-                <MessageComponent
-                  key={message.id}
-                  message={message}
-                  isOwnMessage={message.senderId === user?.id}
-                  showAvatar={index === 0 || messages[index - 1]?.senderId !== message.senderId}
-                />
-              ))}
+              {/* Debug Info - Remove in production */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="bg-yellow-100 p-2 rounded text-xs">
+                  <p>
+                    Active: {activeConversation?.firstName} {activeConversation?.lastName}
+                  </p>
+                  <p>Messages: {messages.length}</p>
+                  <p>WS Status: {connectionStatus}</p>
+                  <p>User: {user?.firstName}</p>
+                </div>
+              )}
+
+              {messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-gray-500">
+                    <p>No messages yet. Start the conversation!</p>
+                  </div>
+                </div>
+              ) : (
+                messages.map((message, index) => (
+                  <MessageComponent
+                    key={message.id}
+                    message={message}
+                    isOwnMessage={message.senderId === user?.id}
+                    showAvatar={index === 0 || messages[index - 1]?.senderId !== message.senderId}
+                  />
+                ))
+              )}
 
               {/* Typing Indicators */}
               {typingUsers.length > 0 && (
@@ -471,12 +654,13 @@ export default function ChatInterface() {
                     placeholder={`Message ${activeConversation.firstName}...`}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows="1"
+                    disabled={connectionStatus !== 'connected'}
                   />
                 </div>
 
                 <button
                   onClick={sendMessage}
-                  disabled={!newMessage.trim()}
+                  disabled={!newMessage.trim() || connectionStatus !== 'connected'}
                   className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-5 h-5" />
@@ -513,7 +697,7 @@ export default function ChatInterface() {
   )
 }
 
-// Message Component
+// Message Component (unchanged but shown for completeness)
 function MessageComponent({ message, isOwnMessage, showAvatar }) {
   const formatTime = date => {
     const now = new Date()
@@ -611,8 +795,8 @@ function MessageComponent({ message, isOwnMessage, showAvatar }) {
       >
         {showAvatar && !isOwnMessage && (
           <img
-            src={message.sender.avatar || '/default-avatar.png'}
-            alt={`${message.sender.firstName} ${message.sender.lastName}`}
+            src={message.sender?.avatar || '/default-avatar.png'}
+            alt={`${message.sender?.firstName} ${message.sender?.lastName}`}
             className="w-8 h-8 rounded-full"
           />
         )}
