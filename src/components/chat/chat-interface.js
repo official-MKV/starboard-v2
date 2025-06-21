@@ -33,7 +33,6 @@ export default function ChatInterface() {
   useEffect(() => {
     const initializeChat = async () => {
       try {
-        console.log('🚀 Initializing chat...')
         setIsLoading(true)
         setError(null)
 
@@ -46,12 +45,7 @@ export default function ChatInterface() {
         }
 
         setUser(session.user)
-        console.log('✅ User loaded:', session.user.firstName, session.user.lastName)
-
-        console.log('📱 Loading existing conversations...')
         await loadExistingConversations(session.user.id)
-
-        console.log('🔌 Attempting WebSocket connection (optional)...')
 
         try {
           const tokenResponse = await fetch('/api/auth/ws-token', {
@@ -61,14 +55,12 @@ export default function ChatInterface() {
           const tokenData = await tokenResponse.json()
 
           if (tokenData.token) {
-            console.log('Attempting WebSocket connection...')
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
             const wsUrl = `${wsProtocol}//${window.location.host}/api/chat/ws?token=${tokenData.token}`
 
             const websocket = new WebSocket(wsUrl)
 
             websocket.onopen = () => {
-              console.log('✅ WebSocket connected - real-time features enabled')
               setWs(websocket)
               setConnectionStatus('connected')
             }
@@ -78,29 +70,23 @@ export default function ChatInterface() {
                 const message = JSON.parse(event.data)
                 handleWebSocketMessage(message)
               } catch (error) {
-                console.error('Error parsing WebSocket message:', error)
+                // Silent error handling
               }
             }
 
             websocket.onclose = event => {
-              console.log('❌ WebSocket disconnected - using HTTP only')
               setWs(null)
               setConnectionStatus('disconnected')
             }
 
             websocket.onerror = error => {
-              console.log('❌ WebSocket error - using HTTP only')
               setConnectionStatus('error')
             }
           }
         } catch (error) {
-          console.log('❌ WebSocket not available - using HTTP only')
           setConnectionStatus('error')
         }
-
-        console.log('✅ Chat initialization complete!')
       } catch (error) {
-        console.error('❌ Error initializing chat:', error)
         setError('Failed to initialize chat. Please refresh the page.')
       } finally {
         setIsLoading(false)
@@ -177,9 +163,8 @@ export default function ChatInterface() {
                   let lastMessage = data.content
                   if (data.type === 'IMAGE') lastMessage = '📷 Image'
                   else if (data.type === 'FILE') lastMessage = '📎 File'
-                  else if (data.type === 'VIDEO_CALL')
-                    lastMessage = '🎥 Video call' // ✅ FIXED: Changed from ZOOM_LINK
-                  else if (lastMessage.length > 50)
+                  else if (data.type === 'VIDEO_CALL') lastMessage = '🎥 Video call'
+                  else if (lastMessage && lastMessage.length > 50)
                     lastMessage = `${lastMessage.substring(0, 50)}...`
 
                   return {
@@ -280,7 +265,7 @@ export default function ChatInterface() {
 
     try {
       const payload = {
-        receiverId: activeConversation.id,
+        receiverId: activeConversation.id, // ✅ Now correctly uses User.id
         content: messageContent,
         type: 'TEXT',
       }
@@ -392,7 +377,7 @@ export default function ChatInterface() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          receiverId: activeConversation.id,
+          receiverId: activeConversation.id, // ✅ Now correctly uses User.id
           content: `Shared ${file.name}`,
           type: file.type.startsWith('image/') ? 'IMAGE' : 'FILE',
           fileUrl: uploadData.fileUrl,
@@ -417,8 +402,8 @@ export default function ChatInterface() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          participantId: activeConversation.id,
-        }), // ✅ REMOVED: No more topic needed
+          participantId: activeConversation.id, // ✅ Now correctly uses User.id
+        }),
       })
 
       const data = await response.json()
@@ -456,10 +441,23 @@ export default function ChatInterface() {
 
       if (response.ok && data.conversations) {
         console.log(`✅ Found ${data.conversations.length} existing conversations`)
-        setConversations(data.conversations)
+
+        // ✅ Transform conversations to ensure they have proper User structure
+        const transformedConversations = data.conversations.map(conv => ({
+          id: conv.id, // Should already be User.id from your API
+          firstName: conv.firstName,
+          lastName: conv.lastName,
+          avatar: conv.avatar,
+          jobTitle: conv.jobTitle,
+          email: conv.email,
+          lastMessage: conv.lastMessage,
+          lastMessageTime: conv.lastMessageTime,
+        }))
+
+        setConversations(transformedConversations)
 
         const conversationMessagesData = {}
-        for (const conv of data.conversations) {
+        for (const conv of transformedConversations) {
           try {
             const messagesResponse = await fetch(`/api/chat/messages?receiverId=${conv.id}&limit=1`)
             const messagesData = await messagesResponse.json()
@@ -493,8 +491,23 @@ export default function ChatInterface() {
       const membersData = await membersResponse.json()
 
       if (membersResponse.ok && membersData.members) {
-        setWorkspaceMembers(membersData.members || [])
-        console.log(`✅ Loaded ${membersData.members.length} workspace members`)
+        // ✅ Transform members to flatten user data to top level for easier access
+        const transformedMembers = membersData.members.map(member => ({
+          // Spread user properties to top level for easier access
+          id: member.user.id, // ✅ User.id at top level
+          firstName: member.user.firstName,
+          lastName: member.user.lastName,
+          avatar: member.user.avatar,
+          jobTitle: member.user.jobTitle,
+          email: member.user.email,
+          // Keep original structure for reference
+          workspaceMemberId: member.id,
+          role: member.role,
+          user: member.user, // Keep original user object
+        }))
+
+        setWorkspaceMembers(transformedMembers)
+        console.log(`✅ Loaded ${transformedMembers.length} workspace members`)
       } else {
         console.error('❌ Failed to load workspace members:', membersData)
         setError('Failed to load workspace members')
@@ -505,29 +518,35 @@ export default function ChatInterface() {
     }
   }
 
-  // Start a new conversation
+  // ✅ Fixed startConversation function
   const startConversation = async memberUser => {
     console.log('Starting conversation with:', memberUser.firstName, memberUser.lastName)
 
+    // ✅ Create conversation object using User data (already transformed)
     const newConversation = {
-      ...memberUser,
+      id: memberUser.id, // ✅ This is now User.id
+      firstName: memberUser.firstName,
+      lastName: memberUser.lastName,
+      avatar: memberUser.avatar,
+      jobTitle: memberUser.jobTitle,
+      email: memberUser.email,
       lastMessage: null,
       lastMessageTime: null,
     }
 
     setConversations(prev => {
-      const exists = prev.some(conv => conv.id === memberUser.id)
+      const exists = prev.some(conv => conv.id === memberUser.id) // ✅ Check User.id
       if (!exists) {
         return [...prev, newConversation]
       }
       return prev
     })
 
-    setActiveConversation(memberUser)
+    setActiveConversation(newConversation) // ✅ Set User object as active conversation
     setShowMemberModal(false)
     setMemberSearchQuery('')
 
-    await loadMessages(memberUser.id)
+    await loadMessages(memberUser.id) // ✅ Use User.id
   }
 
   const handleStartConversation = async () => {
@@ -541,7 +560,7 @@ export default function ChatInterface() {
 
   const isOnline = userId => onlineUsers.has(userId)
 
-  // Filter workspace members for modal
+  // ✅ Filter workspace members for modal
   const filteredWorkspaceMembers = workspaceMembers.filter(member => {
     if (!memberSearchQuery) return true
     const query = memberSearchQuery.toLowerCase()
@@ -590,9 +609,6 @@ export default function ChatInterface() {
               <div
                 className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-gray-400'}`}
               ></div>
-              {/* <span className="text-xs text-gray-500">
-                {connectionStatus === 'connected' ? 'Real-time' : 'HTTP'}
-              </span> */}
             </div>
           </div>
 
@@ -718,7 +734,7 @@ export default function ChatInterface() {
                   </div>
                 </div>
 
-                {/* <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -742,7 +758,7 @@ export default function ChatInterface() {
                   >
                     <MoreVertical className="w-5 h-5" />
                   </Button>
-                </div> */}
+                </div>
               </div>
             </div>
 
@@ -879,18 +895,18 @@ export default function ChatInterface() {
                 </div>
               ) : (
                 filteredWorkspaceMembers
-                  .filter(member => member.id !== user?.id) // Don't show current user
-                  .filter(member => !conversations.some(conv => conv.id === member.id)) // Don't show existing conversations
+                  .filter(member => member.id !== user?.id) // ✅ Don't show current user
+                  .filter(member => !conversations.some(conv => conv.id === member.id)) // ✅ Don't show existing conversations
                   .map(member => (
                     <div
-                      key={member.id}
+                      key={member.id} // ✅ Use User.id
                       onClick={() => startConversation(member)}
                       className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200"
                     >
                       <div className="relative">
                         <img
                           src={member.avatar || '/placeholder.svg?height=40&width=40'}
-                          alt={`${member.user.firstName} ${member.user.lastName}`}
+                          alt={`${member.firstName} ${member.lastName}`}
                           className="w-10 h-10 rounded-full"
                         />
                         {isOnline(member.id) && (
@@ -899,11 +915,11 @@ export default function ChatInterface() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">
-                          {member.user.firstName} {member.user.lastName}
+                          {member.firstName} {member.lastName}
                         </p>
-                        <p className="text-xs text-gray-500 truncate">{member.role.name}</p>
-                        {member.user.email && (
-                          <p className="text-xs text-gray-400 truncate">{member.user.email}</p>
+                        <p className="text-xs text-gray-500 truncate">{member.role?.name}</p>
+                        {member.email && (
+                          <p className="text-xs text-gray-400 truncate">{member.email}</p>
                         )}
                       </div>
                       {isOnline(member.id) && (

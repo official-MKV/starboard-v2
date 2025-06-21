@@ -29,7 +29,8 @@ export async function GET(request) {
     if (!receiverId) {
       return NextResponse.json({ error: 'Receiver ID required' }, { status: 400 })
     }
-
+    console.log(receiverId)
+    console.log(workspaceContext.workspaceId)
     const receiverWorkspace = await prisma.workspaceMember.findFirst({
       where: {
         userId: receiverId,
