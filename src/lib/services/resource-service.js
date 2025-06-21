@@ -73,9 +73,96 @@ export class ResourceService {
     }
   }
 
-  /**
-   * Upload file using AWS service
-   */
+  static FILE_SIZE_LIMITS = {
+    document: 300 * 1024 * 1024, // 300MB
+    video: 1.5 * 1024 * 1024 * 1024, // 1.5GB
+    image: 50 * 1024 * 1024, // 50MB
+    default: 100 * 1024 * 1024, // 100MB
+  }
+
+  static validateFileSize(fileSize, mimeType) {
+    const DOCUMENT_TYPES = ['application/pdf', 'application/msword', 'text/plain']
+    const VIDEO_TYPES = ['video/mp4', 'video/mpeg', 'video/quicktime']
+    const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif']
+
+    let limit = this.FILE_SIZE_LIMITS.default
+    if (DOCUMENT_TYPES.includes(mimeType)) {
+      limit = this.FILE_SIZE_LIMITS.document
+    } else if (VIDEO_TYPES.includes(mimeType)) {
+      limit = this.FILE_SIZE_LIMITS.video
+    } else if (IMAGE_TYPES.includes(mimeType)) {
+      limit = this.FILE_SIZE_LIMITS.image
+    }
+
+    if (fileSize > limit) {
+      const limitMB = Math.round(limit / 1024 / 1024)
+      const limitGB = limitMB >= 1024 ? (limitMB / 1024).toFixed(1) + 'GB' : limitMB + 'MB'
+      throw new Error(`File size exceeds ${limitGB} limit for this file type`)
+    }
+    return true
+  }
+
+  // NEW: Get upload URL for large files
+  static async getUploadUrl(fileName, fileType, fileSize, workspaceId, userId) {
+    try {
+      this.validateFileSize(fileSize, fileType)
+
+      const validation = awsService.validateFile(fileName, fileType, fileSize)
+      if (!validation.valid) {
+        throw new Error(validation.errors.join(', '))
+      }
+
+      const uploadData = await awsService.getPresignedUploadUrl(
+        fileName,
+        fileType,
+        `workspaces/${workspaceId}/resources`,
+        userId
+      )
+
+      return uploadData
+    } catch (error) {
+      logger.error('Failed to generate upload URL', { error: error.message })
+      throw new Error('Failed to generate upload URL')
+    }
+  }
+
+  // NEW: Create resource from direct upload
+  static async createFromDirectUpload(workspaceId, resourceData, uploadedFileData, creatorId) {
+    try {
+      const resource = await prisma.resource.create({
+        data: {
+          workspaceId,
+          creatorId,
+          title: resourceData.title,
+          description: resourceData.description,
+          type: resourceData.type || 'FILE',
+          fileUrl: uploadedFileData.fileUrl,
+          fileName: uploadedFileData.originalName || uploadedFileData.fileName,
+          fileSize: uploadedFileData.fileSize,
+          mimeType: uploadedFileData.mimeType,
+          isPublic: resourceData.isPublic || false,
+          tags: resourceData.tags || [],
+          category: resourceData.category,
+        },
+        include: {
+          creator: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatar: true,
+            },
+          },
+        },
+      })
+
+      return resource
+    } catch (error) {
+      logger.error('Failed to create resource from direct upload', { error: error.message })
+      throw new Error('Failed to create resource')
+    }
+  }
+
   static async uploadFile(file, workspaceId, userId) {
     try {
       // Validate file

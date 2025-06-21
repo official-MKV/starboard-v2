@@ -1,33 +1,42 @@
-// lib/websocket.js - WebSocket server for direct messaging
-import { WebSocketServer } from 'ws'
-import { parse } from 'url'
-import { verify } from 'jsonwebtoken'
-import { prisma } from './database'
+// lib/websocket.js - CommonJS format for compatibility with server.js
+const { WebSocketServer } = require('ws')
+const { parse } = require('url')
+const { verify } = require('jsonwebtoken')
+
+// Import Prisma client from CommonJS database file
+const { prisma } = require('./database-cjs')
 
 const connections = new Map() // userId -> WebSocket connection
 const userStatus = new Map() // userId -> { isOnline: boolean, lastSeen: Date }
+let heartbeatInterval = null
 
-export function setupWebSocketServer(server) {
+function setupWebSocketServer(server) {
+  console.log('🔌 Initializing WebSocket server...')
+
   const wss = new WebSocketServer({
     server,
     path: '/api/chat/ws',
   })
 
   wss.on('connection', async (ws, request) => {
+    console.log('👋 New WebSocket connection attempt')
+
     try {
       const { query } = parse(request.url, true)
       const token = query.token
 
       if (!token) {
+        console.log('❌ No token provided')
         ws.close(1008, 'Authentication required')
         return
       }
 
-      // Verify JWT token (adjust based on your auth implementation)
+      // Verify JWT token
       const decoded = verify(token, process.env.NEXTAUTH_SECRET)
       const userId = decoded.sub || decoded.userId
 
       if (!userId) {
+        console.log('❌ Invalid token, no userId')
         ws.close(1008, 'Invalid token')
         return
       }
@@ -36,18 +45,41 @@ export function setupWebSocketServer(server) {
       connections.set(userId, ws)
       userStatus.set(userId, { isOnline: true, lastSeen: new Date() })
 
-      console.log(`User ${userId} connected to WebSocket`)
+      console.log(`✅ User ${userId} connected (Total: ${connections.size})`)
 
       // Update user's last active timestamp in database
-      await prisma.user
-        .update({
+      try {
+        await prisma.user.update({
           where: { id: userId },
           data: { lastActiveAt: new Date() },
         })
-        .catch(console.error)
+      } catch (dbError) {
+        console.error('⚠️ Database update error:', dbError.message)
+      }
 
       // Broadcast to workspace members that user is online
-      broadcastUserStatus(userId, 'online')
+      await broadcastUserStatus(userId, 'online')
+
+      // Send connection confirmation with online users
+      try {
+        const workspaceMembers = await getWorkspaceMembers(userId)
+        const onlineMembers = workspaceMembers.filter(
+          memberId => userStatus.get(memberId)?.isOnline
+        )
+
+        ws.send(
+          JSON.stringify({
+            type: 'connected',
+            data: {
+              message: 'WebSocket connection established',
+              userId,
+              onlineUsers: onlineMembers,
+            },
+          })
+        )
+      } catch (error) {
+        console.error('⚠️ Error getting workspace members:', error)
+      }
 
       // Handle incoming messages
       ws.on('message', async data => {
@@ -55,47 +87,50 @@ export function setupWebSocketServer(server) {
           const message = JSON.parse(data.toString())
           await handleWebSocketMessage(userId, message)
         } catch (error) {
-          console.error('Error handling WebSocket message:', error)
-          ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }))
+          console.error('❌ Error handling WebSocket message:', error)
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              data: { message: 'Invalid message format' },
+            })
+          )
         }
       })
 
       // Handle connection close
       ws.on('close', async () => {
-        console.log(`User ${userId} disconnected from WebSocket`)
+        console.log(`👋 User ${userId} disconnected`)
         connections.delete(userId)
         userStatus.set(userId, { isOnline: false, lastSeen: new Date() })
 
         // Update database
-        await prisma.user
-          .update({
+        try {
+          await prisma.user.update({
             where: { id: userId },
             data: { lastActiveAt: new Date() },
           })
-          .catch(console.error)
+        } catch (dbError) {
+          console.error('⚠️ Database update error on close:', dbError.message)
+        }
 
         // Broadcast offline status
-        broadcastUserStatus(userId, 'offline')
+        await broadcastUserStatus(userId, 'offline')
       })
 
-      // Send connection confirmation with online users
-      const workspaceMembers = await getWorkspaceMembers(userId)
-      const onlineMembers = workspaceMembers.filter(memberId => userStatus.get(memberId)?.isOnline)
-
-      ws.send(
-        JSON.stringify({
-          type: 'connected',
-          message: 'WebSocket connection established',
-          userId,
-          onlineUsers: onlineMembers,
-        })
-      )
+      // Handle WebSocket errors
+      ws.on('error', error => {
+        console.error(`❌ WebSocket error for user ${userId}:`, error)
+      })
     } catch (error) {
-      console.error('WebSocket connection error:', error)
+      console.error('❌ WebSocket connection error:', error)
       ws.close(1011, 'Server error')
     }
   })
 
+  // Start heartbeat when server is set up
+  startHeartbeat()
+
+  console.log('✅ WebSocket server initialized')
   return wss
 }
 
@@ -115,21 +150,30 @@ async function handleWebSocketMessage(userId, message) {
       await markMessageAsRead(userId, payload.messageId)
       break
 
+    case 'add_reaction':
+      await addMessageReaction(userId, payload.messageId, payload.emoji)
+      break
+
+    case 'remove_reaction':
+      await removeMessageReaction(userId, payload.messageId, payload.emoji)
+      break
+
     case 'get_online_users':
       await sendOnlineUsers(userId)
       break
 
-    case 'heartbeat':
+    case 'heartbeat_ack':
       // Update last seen timestamp
       userStatus.set(userId, { isOnline: true, lastSeen: new Date() })
-      const ws = connections.get(userId)
-      if (ws) {
-        ws.send(JSON.stringify({ type: 'heartbeat_ack' }))
-      }
+      break
+
+    case 'ping':
+      // Simple ping-pong for connection testing
+      broadcastToUser(userId, 'pong', { timestamp: new Date().toISOString() })
       break
 
     default:
-      console.log(`Unknown message type: ${type}`)
+      console.log(`❓ Unknown message type: ${type}`)
   }
 }
 
@@ -137,7 +181,10 @@ async function handleTypingIndicator(userId, receiverId, isTyping) {
   try {
     // Verify both users are in same workspace
     const areInSameWorkspace = await verifyUsersInSameWorkspace(userId, receiverId)
-    if (!areInSameWorkspace) return
+    if (!areInSameWorkspace) {
+      console.log('⚠️ Users not in same workspace for typing indicator')
+      return
+    }
 
     // Send typing indicator to receiver
     broadcastToUser(receiverId, 'typing_indicator', {
@@ -145,44 +192,158 @@ async function handleTypingIndicator(userId, receiverId, isTyping) {
       isTyping,
     })
   } catch (error) {
-    console.error('Error handling typing indicator:', error)
+    console.error('❌ Error handling typing indicator:', error)
   }
 }
 
 async function markMessageAsRead(userId, messageId) {
   try {
-    // Create read receipt
-    await prisma.messageReadReceipt.upsert({
+    // Get the message and verify permissions
+    const message = await prisma.message.findFirst({
       where: {
-        messageId_userId: {
-          messageId,
-          userId,
+        id: messageId,
+        OR: [{ senderId: userId }, { receiverId: userId }],
+      },
+    })
+
+    if (!message) {
+      console.log('⚠️ Message not found or user not authorized')
+      return
+    }
+
+    // Update message as read if the current user is the receiver
+    if (message.receiverId === userId && !message.isRead) {
+      const updatedMessage = await prisma.message.update({
+        where: { id: messageId },
+        data: { isRead: true },
+        include: {
+          sender: {
+            select: { id: true, firstName: true, lastName: true, avatar: true },
+          },
+          receiver: {
+            select: { id: true, firstName: true, lastName: true, avatar: true },
+          },
+          reactions: {
+            include: {
+              user: {
+                select: { id: true, firstName: true, lastName: true },
+              },
+            },
+          },
         },
-      },
-      create: {
-        messageId,
-        userId,
-      },
-      update: {
-        readAt: new Date(),
-      },
-    })
-
-    // Get message details to notify sender
-    const message = await prisma.message.findUnique({
-      where: { id: messageId },
-      select: { senderId: true, receiverId: true },
-    })
-
-    if (message) {
-      // Notify sender that message was read
-      broadcastToUser(message.senderId, 'message_read', {
-        messageId,
-        readBy: userId,
       })
+
+      // Notify sender that message was read
+      if (message.senderId !== userId) {
+        broadcastToUser(message.senderId, 'message_read', {
+          messageId,
+          readBy: userId,
+          message: updatedMessage,
+        })
+      }
+
+      broadcastToUser(userId, 'message_updated', updatedMessage)
     }
   } catch (error) {
-    console.error('Error marking message as read:', error)
+    console.error('❌ Error marking message as read:', error)
+  }
+}
+
+async function addMessageReaction(userId, messageId, emoji) {
+  try {
+    console.log('⚠️ Message reactions require MessageReaction table in your schema')
+    console.log('Add this to your schema if you want reactions:')
+    console.log(`
+      model MessageReaction {
+        id        String   @id @default(cuid())
+        messageId String
+        userId    String
+        emoji     String
+        createdAt DateTime @default(now())
+
+        message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+        user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+        @@unique([messageId, userId, emoji])
+        @@map("message_reactions")
+      }
+    `)
+
+    // Uncomment this when you add the MessageReaction table:
+    /*
+    const reaction = await prisma.messageReaction.create({
+      data: {
+        messageId,
+        userId,
+        emoji
+      },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true }
+        }
+      }
+    })
+
+    // Get updated message with all reactions
+    const updatedMessage = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: {
+        sender: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+        receiver: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+        reactions: {
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true } }
+          }
+        }
+      }
+    })
+
+    // Broadcast the updated message
+    broadcastToUser(updatedMessage.senderId, 'message_updated', updatedMessage)
+    if (updatedMessage.receiverId && updatedMessage.receiverId !== updatedMessage.senderId) {
+      broadcastToUser(updatedMessage.receiverId, 'message_updated', updatedMessage)
+    }
+    */
+  } catch (error) {
+    console.error('❌ Error adding message reaction:', error)
+  }
+}
+
+async function removeMessageReaction(userId, messageId, emoji) {
+  try {
+    console.log('⚠️ Message reaction removal requires MessageReaction table')
+
+    // Uncomment when you have the table:
+    /*
+    await prisma.messageReaction.deleteMany({
+      where: {
+        messageId,
+        userId,
+        emoji
+      }
+    })
+
+    // Get updated message and broadcast
+    const updatedMessage = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: {
+        sender: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+        receiver: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+        reactions: {
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true } }
+          }
+        }
+      }
+    })
+
+    broadcastToUser(updatedMessage.senderId, 'message_updated', updatedMessage)
+    if (updatedMessage.receiverId && updatedMessage.receiverId !== updatedMessage.senderId) {
+      broadcastToUser(updatedMessage.receiverId, 'message_updated', updatedMessage)
+    }
+    */
+  } catch (error) {
+    console.error('❌ Error removing message reaction:', error)
   }
 }
 
@@ -193,17 +354,9 @@ async function sendOnlineUsers(userId) {
       memberId => userStatus.get(memberId)?.isOnline && memberId !== userId
     )
 
-    const ws = connections.get(userId)
-    if (ws) {
-      ws.send(
-        JSON.stringify({
-          type: 'online_users',
-          data: { onlineUsers: onlineMembers },
-        })
-      )
-    }
+    broadcastToUser(userId, 'online_users', { onlineUsers: onlineMembers })
   } catch (error) {
-    console.error('Error sending online users:', error)
+    console.error('❌ Error sending online users:', error)
   }
 }
 
@@ -228,7 +381,7 @@ async function getWorkspaceMembers(userId) {
 
     return members.map(m => m.userId)
   } catch (error) {
-    console.error('Error getting workspace members:', error)
+    console.error('❌ Error getting workspace members:', error)
     return []
   }
 }
@@ -247,7 +400,7 @@ async function verifyUsersInSameWorkspace(userId1, userId2) {
 
     return user1Workspace?.workspaceId === user2Workspace?.workspaceId
   } catch (error) {
-    console.error('Error verifying workspace membership:', error)
+    console.error('❌ Error verifying workspace membership:', error)
     return false
   }
 }
@@ -256,54 +409,60 @@ async function broadcastUserStatus(userId, status) {
   try {
     const workspaceMembers = await getWorkspaceMembers(userId)
 
-    const statusMessage = JSON.stringify({
+    const statusMessage = {
       type: status === 'online' ? 'user_online' : 'user_offline',
       data: { userId },
-    })
+    }
 
     // Broadcast to all workspace members except the user themselves
     for (const memberId of workspaceMembers) {
       if (memberId !== userId) {
-        const ws = connections.get(memberId)
-        if (ws && ws.readyState === 1) {
-          // WebSocket.OPEN
-          ws.send(statusMessage)
-        }
+        broadcastToUser(memberId, statusMessage.type, statusMessage.data)
       }
     }
   } catch (error) {
-    console.error('Error broadcasting user status:', error)
+    console.error('❌ Error broadcasting user status:', error)
   }
 }
 
-// Broadcast functions
-export function broadcastToUser(userId, type, data) {
+// Export broadcast functions for use in API routes
+function broadcastToUser(userId, type, data) {
   const ws = connections.get(userId)
   if (ws && ws.readyState === 1) {
-    ws.send(JSON.stringify({ type, data }))
+    // WebSocket.OPEN
+    try {
+      ws.send(JSON.stringify({ type, data }))
+      console.log(`📡 Broadcasted ${type} to user ${userId}`)
+    } catch (error) {
+      console.error(`❌ Error broadcasting to user ${userId}:`, error)
+    }
+  } else {
+    console.log(`📡 Cannot broadcast ${type} to user ${userId}: not connected`)
   }
 }
 
-export function broadcastToUsers(userIds, type, data) {
+function broadcastToUsers(userIds, type, data) {
   const message = JSON.stringify({ type, data })
 
   for (const userId of userIds) {
     const ws = connections.get(userId)
     if (ws && ws.readyState === 1) {
-      ws.send(message)
+      try {
+        ws.send(message)
+      } catch (error) {
+        console.error(`❌ Error broadcasting to user ${userId}:`, error)
+      }
     }
   }
 }
 
-// Legacy channel broadcast for backward compatibility
-export function broadcastToChannel(channelId, type, data, excludeUserId = null) {
-  // This is kept for backward compatibility but not used in direct messaging
-  console.log('Channel broadcast called but not implemented in direct messaging mode')
-}
-
 // Heartbeat to keep connections alive and track online status
 function startHeartbeat() {
-  setInterval(() => {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval)
+  }
+
+  heartbeatInterval = setInterval(() => {
     const now = new Date()
     const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000)
 
@@ -319,64 +478,22 @@ function startHeartbeat() {
     // Send heartbeat to all connected users
     for (const [userId, ws] of connections.entries()) {
       if (ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: 'heartbeat' }))
+        try {
+          ws.send(JSON.stringify({ type: 'heartbeat' }))
+        } catch (error) {
+          console.error(`❌ Error sending heartbeat to ${userId}:`, error)
+          // Remove broken connection
+          connections.delete(userId)
+        }
       }
     }
   }, 30000) // Every 30 seconds
+
+  console.log('💓 WebSocket heartbeat started')
 }
-
-// Cleanup old typing indicators and offline users
-export async function cleanupExpiredData() {
-  try {
-    // Clean up typing indicators older than 10 seconds
-    await prisma.typingIndicator.deleteMany({
-      where: {
-        expiresAt: {
-          lt: new Date(),
-        },
-      },
-    })
-
-    // Clean up old user status entries
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    for (const [userId, status] of userStatus.entries()) {
-      if (!status.isOnline && status.lastSeen < oneHourAgo) {
-        userStatus.delete(userId)
-      }
-    }
-  } catch (error) {
-    console.error('Error cleaning up expired data:', error)
-  }
-}
-
-// Get current online users for a workspace
-export async function getOnlineUsersForWorkspace(workspaceId) {
-  try {
-    const workspaceMembers = await prisma.workspaceMember.findMany({
-      where: {
-        workspaceId,
-        isActive: true,
-      },
-      select: { userId: true },
-    })
-
-    const onlineUsers = workspaceMembers
-      .map(m => m.userId)
-      .filter(userId => userStatus.get(userId)?.isOnline)
-
-    return onlineUsers
-  } catch (error) {
-    console.error('Error getting online users for workspace:', error)
-    return []
-  }
-}
-
-// Start background processes
-startHeartbeat()
-setInterval(cleanupExpiredData, 60000) // Run cleanup every minute
 
 // Export connection info for monitoring
-export function getConnectionStats() {
+function getConnectionStats() {
   const totalConnections = connections.size
   const onlineUsers = Array.from(userStatus.values()).filter(s => s.isOnline).length
 
@@ -385,4 +502,14 @@ export function getConnectionStats() {
     onlineUsers,
     connectedUsers: Array.from(connections.keys()),
   }
+}
+
+// CommonJS exports
+module.exports = {
+  setupWebSocketServer,
+  broadcastToUser,
+  broadcastToUsers,
+  getConnectionStats,
+  connections,
+  userStatus,
 }

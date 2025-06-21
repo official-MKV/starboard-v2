@@ -1,19 +1,10 @@
 'use client'
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import {
-  Send,
-  Paperclip,
-  Image,
-  Video,
-  Smile,
-  MoreVertical,
-  Phone,
-  Users,
-  Search,
-  Settings,
-  Plus,
-  Circle,
-} from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Send, Paperclip, Video, MoreVertical, Phone, Users, Search, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import MessageComponent from './message-component'
+import { VideoCallInterface } from './video-call-interface'
 
 // Main Chat Interface Component
 export default function ChatInterface() {
@@ -21,96 +12,116 @@ export default function ChatInterface() {
   const [activeConversation, setActiveConversation] = useState(null)
   const [messages, setMessages] = useState([])
   const [conversationMessages, setConversationMessages] = useState({}) // Store messages per conversation
+  const [conversations, setConversations] = useState([]) // List of active conversations
+  const [showMemberModal, setShowMemberModal] = useState(false) // For selecting users to chat with
+  const [showVideoCall, setShowVideoCall] = useState(false)
+  const [currentVideoCall, setCurrentVideoCall] = useState(null)
   const [newMessage, setNewMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [typingUsers, setTypingUsers] = useState([])
   const [ws, setWs] = useState(null)
   const [user, setUser] = useState(null)
   const [onlineUsers, setOnlineUsers] = useState(new Set())
-  const [connectionStatus, setConnectionStatus] = useState('disconnected') // Add connection status
+  const [connectionStatus, setConnectionStatus] = useState('disconnected')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [memberSearchQuery, setMemberSearchQuery] = useState('')
 
-  // Initialize WebSocket connection
   useEffect(() => {
     const initializeChat = async () => {
       try {
-        // Get user session and workspace
+        console.log('🚀 Initializing chat...')
+        setIsLoading(true)
+        setError(null)
+
         const sessionResponse = await fetch('/api/auth/session')
         const session = await sessionResponse.json()
 
         if (!session?.user) {
-          console.error('No user session found')
+          setError('No user session found. Please log in.')
           return
         }
 
         setUser(session.user)
-        console.log('User session loaded:', session.user)
+        console.log('✅ User loaded:', session.user.firstName, session.user.lastName)
 
-        // Load workspace members
-        const membersResponse = await fetch('/api/workspaces/members')
-        const membersData = await membersResponse.json()
-        setWorkspaceMembers(membersData.members || [])
-        console.log('Workspace members loaded:', membersData.members?.length)
+        console.log('📱 Loading existing conversations...')
+        await loadExistingConversations(session.user.id)
 
-        // Connect WebSocket with better error handling
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        const wsUrl = `${wsProtocol}//${window.location.host}/api/chat/ws?token=${session.accessToken}`
-        console.log('Connecting to WebSocket:', wsUrl)
+        console.log('🔌 Attempting WebSocket connection (optional)...')
 
-        const websocket = new WebSocket(wsUrl)
+        try {
+          const tokenResponse = await fetch('/api/auth/ws-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
+          const tokenData = await tokenResponse.json()
 
-        websocket.onopen = () => {
-          console.log('WebSocket connected successfully')
-          setWs(websocket)
-          setConnectionStatus('connected')
-        }
+          if (tokenData.token) {
+            console.log('Attempting WebSocket connection...')
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+            const wsUrl = `${wsProtocol}//${window.location.host}/api/chat/ws?token=${tokenData.token}`
 
-        websocket.onmessage = event => {
-          try {
-            const message = JSON.parse(event.data)
-            console.log('WebSocket message received:', message)
-            handleWebSocketMessage(message)
-          } catch (error) {
-            console.error('Error parsing WebSocket message:', error)
+            const websocket = new WebSocket(wsUrl)
+
+            websocket.onopen = () => {
+              console.log('✅ WebSocket connected - real-time features enabled')
+              setWs(websocket)
+              setConnectionStatus('connected')
+            }
+
+            websocket.onmessage = event => {
+              try {
+                const message = JSON.parse(event.data)
+                handleWebSocketMessage(message)
+              } catch (error) {
+                console.error('Error parsing WebSocket message:', error)
+              }
+            }
+
+            websocket.onclose = event => {
+              console.log('❌ WebSocket disconnected - using HTTP only')
+              setWs(null)
+              setConnectionStatus('disconnected')
+            }
+
+            websocket.onerror = error => {
+              console.log('❌ WebSocket error - using HTTP only')
+              setConnectionStatus('error')
+            }
           }
-        }
-
-        websocket.onclose = event => {
-          console.log('WebSocket disconnected:', event.code, event.reason)
-          setWs(null)
-          setConnectionStatus('disconnected')
-
-          // Don't auto-reconnect if it was a normal close
-          if (event.code !== 1000) {
-            // Attempt to reconnect after 3 seconds
-            setTimeout(() => {
-              console.log('Attempting to reconnect...')
-              initializeChat()
-            }, 3000)
-          }
-        }
-
-        websocket.onerror = error => {
-          console.error('WebSocket error:', error)
+        } catch (error) {
+          console.log('❌ WebSocket not available - using HTTP only')
           setConnectionStatus('error')
         }
 
-        return () => {
-          if (websocket.readyState === WebSocket.OPEN) {
-            websocket.close()
-          }
-        }
+        console.log('✅ Chat initialization complete!')
       } catch (error) {
-        console.error('Error initializing chat:', error)
+        console.error('❌ Error initializing chat:', error)
+        setError('Failed to initialize chat. Please refresh the page.')
+      } finally {
+        setIsLoading(false)
       }
     }
 
     initializeChat()
   }, [])
 
-  // Handle WebSocket messages with better logging
+  // Listen for video call events from message components
+  useEffect(() => {
+    const handleOpenVideoCall = event => {
+      const { meetingData } = event.detail
+      setCurrentVideoCall(meetingData)
+      setShowVideoCall(true)
+    }
+
+    window.addEventListener('openVideoCall', handleOpenVideoCall)
+    return () => window.removeEventListener('openVideoCall', handleOpenVideoCall)
+  }, [])
+
   const handleWebSocketMessage = useCallback(
     message => {
       const { type, data } = message
@@ -126,7 +137,6 @@ export default function ChatInterface() {
 
         case 'new_message':
           console.log('New message received:', data)
-          // Always add the message if it involves the current user
           if (data.senderId === user?.id || data.receiverId === user?.id) {
             // Update current messages if this conversation is active
             if (
@@ -159,15 +169,29 @@ export default function ChatInterface() {
               }
               return prev
             })
+
+            // Update conversations list with last message
+            setConversations(prev => {
+              return prev.map(conv => {
+                if (conv.id === otherUserId) {
+                  let lastMessage = data.content
+                  if (data.type === 'IMAGE') lastMessage = '📷 Image'
+                  else if (data.type === 'FILE') lastMessage = '📎 File'
+                  else if (data.type === 'VIDEO_CALL')
+                    lastMessage = '🎥 Video call' // ✅ FIXED: Changed from ZOOM_LINK
+                  else if (lastMessage.length > 50)
+                    lastMessage = `${lastMessage.substring(0, 50)}...`
+
+                  return {
+                    ...conv,
+                    lastMessage,
+                    lastMessageTime: data.createdAt,
+                  }
+                }
+                return conv
+              })
+            })
           }
-          break
-
-        case 'message_updated':
-          setMessages(prev => prev.map(msg => (msg.id === data.id ? data : msg)))
-          break
-
-        case 'message_deleted':
-          setMessages(prev => prev.filter(msg => msg.id !== data.messageId))
           break
 
         case 'typing_indicator':
@@ -192,13 +216,6 @@ export default function ChatInterface() {
           })
           break
 
-        case 'heartbeat':
-          // Respond to heartbeat
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'heartbeat_ack' }))
-          }
-          break
-
         default:
           console.log('Unknown message type:', type)
       }
@@ -206,15 +223,12 @@ export default function ChatInterface() {
     [activeConversation, user, ws]
   )
 
-  // Load messages for active conversation and update conversation-specific state
   useEffect(() => {
     if (activeConversation && user) {
-      console.log('Loading messages for conversation:', activeConversation.id)
-
-      // Check if we already have messages for this conversation
       const conversationKey = [user.id, activeConversation.id].sort().join('-')
-      if (conversationMessages[conversationKey]) {
-        setMessages(conversationMessages[conversationKey])
+      const cachedMessages = conversationMessages[conversationKey]
+      if (cachedMessages && cachedMessages.length > 1) {
+        setMessages(cachedMessages)
         setTimeout(scrollToBottom, 100)
       } else {
         loadMessages(activeConversation.id)
@@ -225,15 +239,15 @@ export default function ChatInterface() {
   const loadMessages = async otherUserId => {
     try {
       console.log('Fetching messages for user:', otherUserId)
-      const response = await fetch(`/api/chat/messages?receiverId=${otherUserId}&limit=50`)
+      const response = await fetch(`/api/chat/messages?receiverId=${otherUserId}&limit=100`)
       const data = await response.json()
+      console.log(data)
 
       if (response.ok) {
         console.log('Messages loaded:', data.messages?.length)
         const newMessages = data.messages || []
         setMessages(newMessages)
 
-        // Store in conversation-specific state
         const conversationKey = [user.id, otherUserId].sort().join('-')
         setConversationMessages(prev => ({
           ...prev,
@@ -243,9 +257,11 @@ export default function ChatInterface() {
         setTimeout(scrollToBottom, 100)
       } else {
         console.error('Error loading messages:', data.error)
+        setError('Failed to load messages')
       }
     } catch (error) {
       console.error('Error loading messages:', error)
+      setError('Failed to load messages')
     }
   }
 
@@ -255,43 +271,34 @@ export default function ChatInterface() {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !activeConversation) {
-      console.log('Cannot send message: empty content or no active conversation')
-      return
-    }
-
-    if (connectionStatus !== 'connected') {
-      console.log('Cannot send message: WebSocket not connected')
-      alert('Connection lost. Please wait for reconnection.')
       return
     }
 
     const messageContent = newMessage.trim()
-    setNewMessage('') // Clear input immediately for better UX
+    setNewMessage('')
     stopTyping()
 
     try {
-      console.log('Sending message to:', activeConversation.id, 'Content:', messageContent)
+      const payload = {
+        receiverId: activeConversation.id,
+        content: messageContent,
+        type: 'TEXT',
+      }
+
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          receiverId: activeConversation.id,
-          content: messageContent,
-          type: 'TEXT',
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
-      console.log('API Response:', response.status, data)
 
       if (!response.ok) {
-        console.error('Error sending message:', data.error)
-        alert(`Failed to send message: ${data.error}`)
-        // Restore message content if sending failed
+        console.error('❌ Error sending message:', data.error)
+        setError(`Failed to send message: ${data.error}`)
         setNewMessage(messageContent)
       } else {
-        console.log('Message sent successfully:', data.message)
-        // Add message immediately to state for better UX (it will also come via WebSocket)
+        console.log('✅ Message sent successfully:', data.message)
         setMessages(prev => {
           const exists = prev.some(msg => msg.id === data.message.id)
           if (!exists) {
@@ -299,12 +306,29 @@ export default function ChatInterface() {
           }
           return prev
         })
+
+        // Update conversations list with last message
+        setConversations(prev => {
+          return prev.map(conv => {
+            if (conv.id === activeConversation.id) {
+              let lastMessage = messageContent
+              if (lastMessage.length > 50) lastMessage = `${lastMessage.substring(0, 50)}...`
+
+              return {
+                ...conv,
+                lastMessage,
+                lastMessageTime: data.message.createdAt,
+              }
+            }
+            return conv
+          })
+        })
+
         setTimeout(scrollToBottom, 100)
       }
     } catch (error) {
-      console.error('Error sending message:', error)
-      alert('Network error. Please check your connection.')
-      // Restore message content if sending failed
+      console.error('❌ Network error sending message:', error)
+      setError('Network error. Please check your connection.')
       setNewMessage(messageContent)
     }
   }
@@ -344,7 +368,6 @@ export default function ChatInterface() {
     if (!file || !activeConversation) return
 
     try {
-      // Get presigned URL
       const uploadResponse = await fetch('/api/chat/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -381,95 +404,210 @@ export default function ChatInterface() {
       })
     } catch (error) {
       console.error('Error uploading file:', error)
+      setError('Failed to upload file')
     }
   }
 
-  const createZoomMeeting = async () => {
+  const createVideoCall = async () => {
     if (!activeConversation) return
 
     try {
-      const response = await fetch('/api/chat/zoom/create', {
+      console.log('🎥 Creating video call...')
+      const response = await fetch('/api/chat/video/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: `Chat with ${activeConversation.firstName} ${activeConversation.lastName}`,
-          participants: [activeConversation.id],
-        }),
+          participantId: activeConversation.id,
+        }), // ✅ REMOVED: No more topic needed
       })
 
-      const zoomData = await response.json()
+      const data = await response.json()
 
-      // Send zoom link message
-      await fetch('/api/chat/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          receiverId: activeConversation.id,
-          content: zoomData.message.content,
-          type: 'ZOOM_LINK',
-          metadata: zoomData.message.metadata,
-        }),
-      })
+      if (response.ok) {
+        console.log('✅ Video call created:', data.meeting)
+
+        // Set video call data and show interface
+        setCurrentVideoCall(data.meeting)
+        setShowVideoCall(true)
+
+        // The message is already sent by the API, no need to send another one
+      } else {
+        console.error('❌ Error creating video call:', data.error)
+        setError('Failed to create video call')
+      }
     } catch (error) {
-      console.error('Error creating Zoom meeting:', error)
+      console.error('❌ Error creating video call:', error)
+      setError('Failed to create video call')
     }
   }
 
-  const filteredMembers = workspaceMembers.filter(
-    member =>
-      member.user.id !== user?.id && // Exclude current user
-      (member.user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        member.user.email.toLowerCase().includes(searchQuery.toLowerCase()))
-  )
+  const handleCallEnd = () => {
+    // Refresh messages to update call status
+    if (activeConversation) {
+      loadMessages(activeConversation.id)
+    }
+  }
 
-  const getLastMessage = memberId => {
-    // Get conversation key and find messages for this conversation
-    const conversationKey = [user?.id, memberId].sort().join('-')
-    const conversationMsgs = conversationMessages[conversationKey] || []
+  const loadExistingConversations = async userId => {
+    try {
+      console.log('📞 Fetching conversations from API...')
+      const response = await fetch('/api/chat/conversations')
+      const data = await response.json()
 
-    if (conversationMsgs.length === 0) {
-      return 'Click to start chatting...'
+      if (response.ok && data.conversations) {
+        console.log(`✅ Found ${data.conversations.length} existing conversations`)
+        setConversations(data.conversations)
+
+        const conversationMessagesData = {}
+        for (const conv of data.conversations) {
+          try {
+            const messagesResponse = await fetch(`/api/chat/messages?receiverId=${conv.id}&limit=1`)
+            const messagesData = await messagesResponse.json()
+
+            if (messagesData.messages && messagesData.messages.length > 0) {
+              const conversationKey = [userId, conv.id].sort().join('-')
+              conversationMessagesData[conversationKey] = messagesData.messages
+            }
+          } catch (error) {
+            console.log(`⚠️ Could not load messages for ${conv.firstName} ${conv.lastName}`)
+          }
+        }
+        setConversationMessages(conversationMessagesData)
+      } else {
+        console.log('📭 No existing conversations found')
+      }
+    } catch (error) {
+      console.error('❌ Error loading existing conversations:', error)
+      setError('Failed to load conversations')
+    }
+  }
+
+  const loadWorkspaceMembers = async () => {
+    if (workspaceMembers.length > 0) {
+      return
     }
 
-    const lastMessage = conversationMsgs[conversationMsgs.length - 1]
-    if (lastMessage.type === 'IMAGE') return '📷 Image'
-    if (lastMessage.type === 'FILE') return '📎 File'
-    if (lastMessage.type === 'ZOOM_LINK') return '🎥 Video call'
+    try {
+      console.log('👥 Loading workspace members from API...')
+      const membersResponse = await fetch('/api/workspaces/members')
+      const membersData = await membersResponse.json()
 
-    return lastMessage.content.length > 50
-      ? `${lastMessage.content.substring(0, 50)}...`
-      : lastMessage.content
+      if (membersResponse.ok && membersData.members) {
+        setWorkspaceMembers(membersData.members || [])
+        console.log(`✅ Loaded ${membersData.members.length} workspace members`)
+      } else {
+        console.error('❌ Failed to load workspace members:', membersData)
+        setError('Failed to load workspace members')
+      }
+    } catch (error) {
+      console.error('❌ Error loading workspace members:', error)
+      setError('Failed to load workspace members')
+    }
+  }
+
+  // Start a new conversation
+  const startConversation = async memberUser => {
+    console.log('Starting conversation with:', memberUser.firstName, memberUser.lastName)
+
+    const newConversation = {
+      ...memberUser,
+      lastMessage: null,
+      lastMessageTime: null,
+    }
+
+    setConversations(prev => {
+      const exists = prev.some(conv => conv.id === memberUser.id)
+      if (!exists) {
+        return [...prev, newConversation]
+      }
+      return prev
+    })
+
+    setActiveConversation(memberUser)
+    setShowMemberModal(false)
+    setMemberSearchQuery('')
+
+    await loadMessages(memberUser.id)
+  }
+
+  const handleStartConversation = async () => {
+    try {
+      await loadWorkspaceMembers()
+      setShowMemberModal(true)
+    } catch (error) {
+      console.error('❌ Error in handleStartConversation:', error)
+    }
   }
 
   const isOnline = userId => onlineUsers.has(userId)
 
+  // Filter workspace members for modal
+  const filteredWorkspaceMembers = workspaceMembers.filter(member => {
+    if (!memberSearchQuery) return true
+    const query = memberSearchQuery.toLowerCase()
+    return (
+      member.firstName.toLowerCase().includes(query) ||
+      member.lastName.toLowerCase().includes(query) ||
+      (member.jobTitle && member.jobTitle.toLowerCase().includes(query))
+    )
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen bg-gray-100 items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading chat...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen bg-gray-100 items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">❌ {error}</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Sidebar - Workspace Members */}
+      {/* Sidebar - Conversations */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
-            {/* Connection Status Indicator */}
             <div className="flex items-center space-x-2">
               <div
-                className={`w-2 h-2 rounded-full ${
-                  connectionStatus === 'connected'
-                    ? 'bg-green-500'
-                    : connectionStatus === 'error'
-                      ? 'bg-red-500'
-                      : 'bg-yellow-500'
-                }`}
+                className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-gray-400'}`}
               ></div>
-              <span className="text-xs text-gray-500 capitalize">{connectionStatus}</span>
+              {/* <span className="text-xs text-gray-500">
+                {connectionStatus === 'connected' ? 'Real-time' : 'HTTP'}
+              </span> */}
             </div>
           </div>
+
+          {conversations.length > 0 && (
+            <Button onClick={handleStartConversation} className="w-full mb-3">
+              <Plus className="w-4 h-4 mr-2" />
+              New Conversation
+            </Button>
+          )}
+
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search people..."
+              placeholder="Search conversations..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -478,52 +616,76 @@ export default function ChatInterface() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {filteredMembers.map(member => (
-            <div
-              key={member.user.id}
-              onClick={() => setActiveConversation(member.user)}
-              className={`p-4 cursor-pointer hover:bg-gray-50 border-b border-gray-100 ${
-                activeConversation?.id === member.user.id
-                  ? 'bg-blue-50 border-r-2 border-blue-500'
-                  : ''
-              }`}
-            >
-              <div className="flex items-center space-x-3">
-                <div className="relative">
-                  <img
-                    src={member.user.avatar || '/default-avatar.png'}
-                    alt={`${member.user.firstName} ${member.user.lastName}`}
-                    className="w-12 h-12 rounded-full"
-                  />
-                  {isOnline(member.user.id) && (
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {member.user.firstName} {member.user.lastName}
-                    </p>
-                    <span className="text-xs text-gray-500">
-                      {isOnline(member.user.id) ? 'Online' : 'Offline'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 truncate">
-                    {member.user.jobTitle || member.role.name}
-                  </p>
-                  <p className="text-xs text-gray-400 truncate mt-1">
-                    {getLastMessage(member.user.id)}
-                  </p>
-                </div>
+          {conversations.length === 0 ? (
+            <div className="flex items-center justify-center h-full p-8">
+              <div className="text-center">
+                <Users className="w-16 h-16 mx-auto mb-6 text-gray-300" />
+                <h3 className="text-xl font-medium text-gray-900 mb-2">No conversations yet</h3>
+                <p className="text-gray-500 mb-6">Start chatting with your workspace members</p>
+                <Button onClick={handleStartConversation}>
+                  <Plus className="w-5 h-5 mr-2" />
+                  Start Your First Conversation
+                </Button>
               </div>
             </div>
-          ))}
-
-          {filteredMembers.length === 0 && (
-            <div className="p-8 text-center text-gray-500">
-              <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No workspace members found</p>
-            </div>
+          ) : (
+            <>
+              {conversations
+                .filter(conversation => {
+                  if (!searchQuery) return true
+                  const query = searchQuery.toLowerCase()
+                  return (
+                    conversation.firstName.toLowerCase().includes(query) ||
+                    conversation.lastName.toLowerCase().includes(query) ||
+                    (conversation.lastMessage &&
+                      conversation.lastMessage.toLowerCase().includes(query))
+                  )
+                })
+                .map(conversation => (
+                  <div
+                    key={conversation.id}
+                    onClick={() => {
+                      setActiveConversation(conversation)
+                    }}
+                    className={`p-4 cursor-pointer hover:bg-gray-50 border-b border-gray-100 ${
+                      activeConversation?.id === conversation.id
+                        ? 'bg-blue-50 border-r-2 border-blue-500'
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="relative">
+                        <img
+                          src={conversation.avatar || '/placeholder.svg?height=48&width=48'}
+                          alt={`${conversation.firstName} ${conversation.lastName}`}
+                          className="w-12 h-12 rounded-full"
+                        />
+                        {isOnline(conversation.id) && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {conversation.firstName} {conversation.lastName}
+                          </p>
+                          <span className="text-xs text-gray-500">
+                            {conversation.lastMessageTime
+                              ? new Date(conversation.lastMessageTime).toLocaleDateString()
+                              : ''}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate">
+                          {conversation.jobTitle || 'Team Member'}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate mt-1">
+                          {conversation.lastMessage || 'No messages yet'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </>
           )}
         </div>
       </div>
@@ -538,7 +700,7 @@ export default function ChatInterface() {
                 <div className="flex items-center space-x-3">
                   <div className="relative">
                     <img
-                      src={activeConversation.avatar || '/default-avatar.png'}
+                      src={activeConversation.avatar || '/placeholder.svg?height=40&width=40'}
                       alt={`${activeConversation.firstName} ${activeConversation.lastName}`}
                       className="w-10 h-10 rounded-full"
                     />
@@ -556,38 +718,36 @@ export default function ChatInterface() {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={createZoomMeeting}
-                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                {/* <div className="flex items-center space-x-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={createVideoCall}
+                    className="p-2 text-gray-400 hover:text-gray-600"
                     title="Start video call"
                   >
                     <Video className="w-5 h-5" />
-                  </button>
-                  <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="p-2 text-gray-400 hover:text-gray-600"
+                  >
                     <Phone className="w-5 h-5" />
-                  </button>
-                  <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="p-2 text-gray-400 hover:text-gray-600"
+                  >
                     <MoreVertical className="w-5 h-5" />
-                  </button>
-                </div>
+                  </Button>
+                </div> */}
               </div>
             </div>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Debug Info - Remove in production */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="bg-yellow-100 p-2 rounded text-xs">
-                  <p>
-                    Active: {activeConversation?.firstName} {activeConversation?.lastName}
-                  </p>
-                  <p>Messages: {messages.length}</p>
-                  <p>WS Status: {connectionStatus}</p>
-                  <p>User: {user?.firstName}</p>
-                </div>
-              )}
-
               {messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center text-gray-500">
@@ -609,7 +769,7 @@ export default function ChatInterface() {
               {typingUsers.length > 0 && (
                 <div className="flex items-center space-x-2">
                   <img
-                    src={activeConversation.avatar || '/default-avatar.png'}
+                    src={activeConversation.avatar || '/placeholder.svg?height=24&width=24'}
                     alt="typing"
                     className="w-6 h-6 rounded-full"
                   />
@@ -634,13 +794,15 @@ export default function ChatInterface() {
             {/* Message Input */}
             <div className="bg-white border-t border-gray-200 p-4">
               <div className="flex items-center space-x-3">
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                  className="p-2 text-gray-400 hover:text-gray-600"
                   title="Attach file"
                 >
                   <Paperclip className="w-5 h-5" />
-                </button>
+                </Button>
 
                 <div className="flex-1 relative">
                   <textarea
@@ -654,17 +816,12 @@ export default function ChatInterface() {
                     placeholder={`Message ${activeConversation.firstName}...`}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows="1"
-                    disabled={connectionStatus !== 'connected'}
                   />
                 </div>
 
-                <button
-                  onClick={sendMessage}
-                  disabled={!newMessage.trim() || connectionStatus !== 'connected'}
-                  className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                <Button onClick={sendMessage} disabled={!newMessage.trim()}>
                   <Send className="w-5 h-5" />
-                </button>
+                </Button>
               </div>
 
               <input
@@ -693,122 +850,81 @@ export default function ChatInterface() {
           </div>
         )}
       </div>
-    </div>
-  )
-}
 
-// Message Component (unchanged but shown for completeness)
-function MessageComponent({ message, isOwnMessage, showAvatar }) {
-  const formatTime = date => {
-    const now = new Date()
-    const messageDate = new Date(date)
-    const diffInHours = (now - messageDate) / (1000 * 60 * 60)
+      {/* Member Selection Modal */}
+      <Dialog open={showMemberModal} onOpenChange={setShowMemberModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start New Conversation</DialogTitle>
+          </DialogHeader>
 
-    if (diffInHours < 24) {
-      return messageDate.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    } else {
-      return messageDate.toLocaleDateString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    }
-  }
+          <div className="space-y-4">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search workspace members..."
+                value={memberSearchQuery}
+                onChange={e => setMemberSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
 
-  const renderMessageContent = () => {
-    switch (message.type) {
-      case 'IMAGE':
-        return (
-          <div className="mt-2">
-            <img
-              src={message.thumbnailUrl || message.fileUrl}
-              alt={message.fileName}
-              className="max-w-sm rounded-lg cursor-pointer hover:opacity-90"
-              onClick={() => window.open(message.fileUrl, '_blank')}
-            />
-          </div>
-        )
-
-      case 'FILE':
-        return (
-          <div className="mt-2 p-3 bg-gray-50 rounded-lg border max-w-sm">
-            <div className="flex items-center space-x-3">
-              <Paperclip className="w-5 h-5 text-gray-400" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{message.fileName}</p>
-                {message.fileSize && (
-                  <p className="text-xs text-gray-500">
-                    {(message.fileSize / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={() => window.open(message.fileUrl, '_blank')}
-                className="text-blue-500 hover:text-blue-700 text-sm font-medium"
-              >
-                Download
-              </button>
+            {/* Members List */}
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {filteredWorkspaceMembers.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  {memberSearchQuery ? 'No members found' : 'Loading workspace members...'}
+                </div>
+              ) : (
+                filteredWorkspaceMembers
+                  .filter(member => member.id !== user?.id) // Don't show current user
+                  .filter(member => !conversations.some(conv => conv.id === member.id)) // Don't show existing conversations
+                  .map(member => (
+                    <div
+                      key={member.id}
+                      onClick={() => startConversation(member)}
+                      className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200"
+                    >
+                      <div className="relative">
+                        <img
+                          src={member.avatar || '/placeholder.svg?height=40&width=40'}
+                          alt={`${member.user.firstName} ${member.user.lastName}`}
+                          className="w-10 h-10 rounded-full"
+                        />
+                        {isOnline(member.id) && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {member.user.firstName} {member.user.lastName}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{member.role.name}</p>
+                        {member.user.email && (
+                          <p className="text-xs text-gray-400 truncate">{member.user.email}</p>
+                        )}
+                      </div>
+                      {isOnline(member.id) && (
+                        <span className="text-xs text-green-600 font-medium">Online</span>
+                      )}
+                    </div>
+                  ))
+              )}
             </div>
           </div>
-        )
+        </DialogContent>
+      </Dialog>
 
-      case 'ZOOM_LINK':
-        return (
-          <div className="mt-2 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-sm">
-            <div className="flex items-center space-x-3">
-              <Video className="w-6 h-6 text-blue-500" />
-              <div className="flex-1">
-                <p className="font-medium text-blue-900">{message.metadata?.topic}</p>
-                <p className="text-sm text-blue-700">Video call invitation</p>
-              </div>
-            </div>
-            <button
-              onClick={() => window.open(message.metadata?.joinUrl, '_blank')}
-              className="mt-3 w-full bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-            >
-              Join Call
-            </button>
-          </div>
-        )
-
-      default:
-        return (
-          <div
-            className={`inline-block px-4 py-2 rounded-2xl max-w-xs lg:max-w-md ${
-              isOwnMessage ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'
-            }`}
-          >
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
-          </div>
-        )
-    }
-  }
-
-  return (
-    <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`flex space-x-2 max-w-xl ${isOwnMessage ? 'flex-row-reverse space-x-reverse' : ''}`}
-      >
-        {showAvatar && !isOwnMessage && (
-          <img
-            src={message.sender?.avatar || '/default-avatar.png'}
-            alt={`${message.sender?.firstName} ${message.sender?.lastName}`}
-            className="w-8 h-8 rounded-full"
-          />
-        )}
-
-        <div className={`${showAvatar ? '' : 'ml-10'} ${isOwnMessage ? 'mr-10' : ''}`}>
-          {renderMessageContent()}
-          <p className={`text-xs text-gray-500 mt-1 ${isOwnMessage ? 'text-right' : 'text-left'}`}>
-            {formatTime(message.createdAt)}
-            {message.isEdited && <span className="ml-1">(edited)</span>}
-          </p>
-        </div>
-      </div>
+      {/* Video Call Interface */}
+      <VideoCallInterface
+        isOpen={showVideoCall}
+        onClose={() => setShowVideoCall(false)}
+        meetingData={currentVideoCall}
+        isHost={currentVideoCall?.host?.id === user?.id}
+        onCallEnd={handleCallEnd}
+      />
     </div>
   )
 }

@@ -124,7 +124,9 @@ receivedTyping TypingIndicator[] @relation("TypingReceiver")
   recordingViews      RecordingView[]
   invitedToEvents     EventRegistration[] @relation("EventInviter")
   eventAccess         EventAccess[]
-  reactions MessageReaction[]
+  hostedVideoCalls       VideoCall[]  @relation("VideoCallHost")
+  participatedVideoCalls VideoCall[]  @relation("VideoCallParticipant")
+
 
   @@map("users")
 }
@@ -170,6 +172,7 @@ model Workspace {
   userInvitations   UserInvitation[]
   onboardingFlows   OnboardingFlow[]
   emailTemplates    EmailTemplate[]
+  videoCalls VideoCall[]
   onboardingCompletions OnboardingCompletion[]
     activities Activity[]
 
@@ -258,6 +261,7 @@ enum EmailTemplateType {
   ACCEPTANCE
   REJECTION
 }
+
 
 // ===== ROLE & PERMISSION MODELS =====
 
@@ -803,7 +807,8 @@ model Message {
   // ✅ ADD THESE RELATIONS
   parent    Message?  @relation("MessageReplies", fields: [parentId], references: [id])
   replies   Message[] @relation("MessageReplies")
-  reactions MessageReaction[]
+ reactions   Json  @default("[]")
+readBy      Json  @default("[]")
 
   @@map("messages")
 }
@@ -821,19 +826,41 @@ model TypingIndicator {
   @@unique([senderId, receiverId])
   @@map("typing_indicators")
 }
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  VIDEO_CALL
+}
 
-model MessageReaction {
-  id        String   @id @default(cuid())
-  messageId String
-  userId    String
-  emoji     String
-  createdAt DateTime @default(now())
 
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+model VideoCall {
+  id            String    @id @default(cuid())
+  hostId        String
+  participantId String
+  workspaceId   String
+  topic         String
+  zoomMeetingId String
+  joinUrl       String
+  startUrl      String
+  password      String?
+  status        String    @default("CREATED") // CREATED, STARTED, ENDED
 
-  @@unique([messageId, userId, emoji])
-  @@map("message_reactions")
+  // ✅ ADD THESE ZOOM-SPECIFIC FIELDS
+  zoomUuid      String?
+  zoomHostId    String?
+  zoomStartTime DateTime?
+  zoomDuration  Int?      // Duration in minutes
+  zoomTimezone  String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  host        User      @relation("VideoCallHost", fields: [hostId], references: [id])
+  participant User      @relation("VideoCallParticipant", fields: [participantId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@map("video_calls")
 }
 
 model Notification {
@@ -922,12 +949,7 @@ enum ResourceType {
   OTHER
 }
 
-enum MessageType {
-  TEXT
-  FILE
-  IMAGE
-  SYSTEM
-}
+
 
 enum NotificationType {
   INFO

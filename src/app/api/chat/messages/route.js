@@ -1,9 +1,13 @@
-// app/api/chat/messages/route.js - Direct messaging API
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/database'
 import { WorkspaceContext } from '@/lib/workspace-context'
-import { broadcastToUser } from '@/lib/websocket'
+
+const broadcastToUser =
+  global.broadcastToUser ||
+  (() => {
+    console.log('WebSocket not available - message saved but not broadcasted')
+  })
 
 export async function GET(request) {
   try {
@@ -20,13 +24,12 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url)
     const receiverId = searchParams.get('receiverId')
     const cursor = searchParams.get('cursor')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const limit = parseInt(searchParams.get('limit') || '1000')
 
     if (!receiverId) {
       return NextResponse.json({ error: 'Receiver ID required' }, { status: 400 })
     }
 
-    // Verify receiver is in same workspace
     const receiverWorkspace = await prisma.workspaceMember.findFirst({
       where: {
         userId: receiverId,
@@ -39,7 +42,6 @@ export async function GET(request) {
       return NextResponse.json({ error: 'User not in workspace' }, { status: 403 })
     }
 
-    // Build query for direct messages between these two users
     const where = {
       isDeleted: false,
       OR: [
@@ -61,28 +63,27 @@ export async function GET(request) {
         receiver: {
           select: { id: true, firstName: true, lastName: true, avatar: true },
         },
-        reactions: {
-          include: {
-            user: {
-              select: { id: true, firstName: true, lastName: true },
-            },
-          },
-        },
         _count: {
           select: { replies: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
       take: limit,
     })
 
     return NextResponse.json({
-      messages: messages.reverse(), // Reverse to show oldest first
+      messages: messages,
       hasMore: messages.length === limit,
     })
   } catch (error) {
     console.error('Error fetching messages:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: 'Failed to load messages',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      },
+      { status: 500 }
+    )
   }
 }
 
@@ -119,7 +120,6 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Message content or file required' }, { status: 400 })
     }
 
-    // Verify receiver is in same workspace
     const receiverWorkspace = await prisma.workspaceMember.findFirst({
       where: {
         userId: receiverId,
@@ -154,20 +154,28 @@ export async function POST(request) {
         receiver: {
           select: { id: true, firstName: true, lastName: true, avatar: true },
         },
-        reactions: true,
         _count: {
           select: { replies: true },
         },
       },
     })
 
-    // Broadcast to both users via WebSocket
-    broadcastToUser(receiverId, 'new_message', message)
-    broadcastToUser(session.user.id, 'new_message', message)
+    try {
+      broadcastToUser(receiverId, 'new_message', message)
+      broadcastToUser(session.user.id, 'new_message', message)
+    } catch (wsError) {
+      console.error('WebSocket broadcast failed (message still saved):', wsError)
+    }
 
     return NextResponse.json({ message }, { status: 201 })
   } catch (error) {
     console.error('Error sending message:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: 'Failed to send message',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      },
+      { status: 500 }
+    )
   }
 }

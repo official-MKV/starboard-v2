@@ -1,14 +1,9 @@
-// app/api/resources/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
 import { ResourceService } from '@/lib/services/resource-service'
 import { logger } from '@/lib/logger'
 
-/**
- * GET /api/resources
- * Get all resources for current workspace with filters
- */
 export async function GET(request) {
   try {
     const session = await auth()
@@ -16,7 +11,6 @@ export async function GET(request) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
       return NextResponse.json(
@@ -25,7 +19,6 @@ export async function GET(request) {
       )
     }
 
-    // Check permissions
     const hasPermission = await WorkspaceContext.hasAnyPermission(
       session.user.id,
       workspaceContext.workspaceId,
@@ -39,7 +32,6 @@ export async function GET(request) {
       )
     }
 
-    // Parse query parameters
     const url = new URL(request.url)
     const filters = {
       search: url.searchParams.get('search') || '',
@@ -56,9 +48,8 @@ export async function GET(request) {
       limit: parseInt(url.searchParams.get('limit')) || 50,
     }
 
-    // Get resources
     const result = await ResourceService.findByWorkspace(workspaceContext.workspaceId, filters)
-    console.log(result)
+
     logger.info('Resources fetched', {
       workspaceId: workspaceContext.workspaceId,
       userId: session.user.id,
@@ -79,10 +70,6 @@ export async function GET(request) {
   }
 }
 
-/**
- * POST /api/resources
- * Create a new resource
- */
 export async function POST(request) {
   try {
     const session = await auth()
@@ -90,7 +77,6 @@ export async function POST(request) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
       return NextResponse.json(
@@ -99,7 +85,6 @@ export async function POST(request) {
       )
     }
 
-    // Check permissions
     const hasPermission = await WorkspaceContext.hasPermission(
       session.user.id,
       workspaceContext.workspaceId,
@@ -113,56 +98,127 @@ export async function POST(request) {
       )
     }
 
-    // Parse form data
-    const formData = await request.formData()
-    const file = formData.get('file')
-    const title = formData.get('title')
-    const description = formData.get('description')
-    const type = formData.get('type') || 'FILE'
-    const isPublic = formData.get('isPublic') === 'true'
-    const tags = JSON.parse(formData.get('tags') || '[]')
-    const category = formData.get('category') || ''
+    const contentType = request.headers.get('content-type')
 
-    // Validate required fields
-    if (!title?.trim()) {
-      return NextResponse.json(
-        { error: { message: 'Resource title is required' } },
-        { status: 400 }
+    if (contentType?.includes('multipart/form-data')) {
+      const formData = await request.formData()
+      const file = formData.get('file')
+      const title = formData.get('title')
+      const description = formData.get('description') || ''
+      const category = formData.get('category') || ''
+      const isPublic = formData.get('isPublic') === 'true'
+      const tagsString = formData.get('tags') || '[]'
+
+      if (!file || !title) {
+        return NextResponse.json(
+          { error: { message: 'File and title are required' } },
+          { status: 400 }
+        )
+      }
+
+      let tags = []
+      try {
+        tags = JSON.parse(tagsString)
+      } catch (e) {
+        tags = []
+      }
+
+      const resourceData = {
+        title: title.toString(),
+        description: description.toString(),
+        category: category.toString(),
+        isPublic,
+        tags: Array.isArray(tags) ? tags : [],
+      }
+
+      const resource = await ResourceService.create(
+        workspaceContext.workspaceId,
+        resourceData,
+        file,
+        session.user.id
       )
+
+      logger.info('Small file resource created', {
+        workspaceId: workspaceContext.workspaceId,
+        userId: session.user.id,
+        resourceId: resource.id,
+        fileName: file.name,
+        fileSize: file.size,
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: { resource },
+      })
+    } else if (contentType?.includes('application/json')) {
+      const body = await request.json()
+
+      if (body.type === 'direct_upload') {
+        const { resourceData, uploadedFileData } = body
+
+        if (!resourceData || !uploadedFileData) {
+          return NextResponse.json(
+            { error: { message: 'Resource data and uploaded file data are required' } },
+            { status: 400 }
+          )
+        }
+
+        if (!resourceData.title || !uploadedFileData.fileUrl) {
+          return NextResponse.json(
+            { error: { message: 'Title and file URL are required' } },
+            { status: 400 }
+          )
+        }
+
+        const resource = await ResourceService.createFromDirectUpload(
+          workspaceContext.workspaceId,
+          {
+            title: resourceData.title,
+            description: resourceData.description || '',
+            category: resourceData.category || '',
+            isPublic: Boolean(resourceData.isPublic),
+            tags: Array.isArray(resourceData.tags) ? resourceData.tags : [],
+          },
+          {
+            fileUrl: uploadedFileData.fileUrl,
+            fileName: uploadedFileData.fileName,
+            fileSize: uploadedFileData.fileSize,
+            mimeType: uploadedFileData.mimeType,
+          },
+          session.user.id
+        )
+
+        logger.info('Large file resource created', {
+          workspaceId: workspaceContext.workspaceId,
+          userId: session.user.id,
+          resourceId: resource.id,
+          fileName: uploadedFileData.fileName,
+          fileSize: uploadedFileData.fileSize,
+        })
+
+        return NextResponse.json({
+          success: true,
+          data: { resource },
+        })
+      }
+
+      return NextResponse.json({ error: { message: 'Invalid request type' } }, { status: 400 })
     }
 
-    // Create resource data
-    const resourceData = {
-      title: title.trim(),
-      description: description?.trim() || null,
-      type,
-      isPublic,
-      tags,
-      category: category?.trim() || null,
-    }
-
-    // Create the resource
-    const resource = await ResourceService.create(
-      workspaceContext.workspaceId,
-      resourceData,
-      file,
-      session.user.id
+    return NextResponse.json(
+      {
+        error: {
+          message: 'Invalid content type. Expected multipart/form-data or application/json',
+        },
+      },
+      { status: 400 }
     )
-
-    logger.info('Resource created', {
-      resourceId: resource.id,
-      resourceTitle: resource.title,
-      workspaceId: workspaceContext.workspaceId,
-      userId: session.user.id,
-    })
-
-    return NextResponse.json({
-      success: true,
-      data: { resource },
-      message: 'Resource created successfully',
-    })
   } catch (error) {
-    logger.error('Error creating resource', { error: error.message })
+    logger.error('Error creating resource', {
+      error: error.message,
+      stack: error.stack,
+    })
+
     return NextResponse.json(
       { error: { message: error.message || 'Failed to create resource' } },
       { status: 500 }

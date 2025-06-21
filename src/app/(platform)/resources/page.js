@@ -6,20 +6,14 @@ import {
   FolderOpen,
   Upload,
   Search,
-  Filter,
   Download,
   Eye,
-  Edit,
   Trash2,
   FileText,
   Image,
   Video,
-  File,
   Globe,
   Lock,
-  Calendar,
-  User,
-  Tag,
   Grid,
   List,
   Plus,
@@ -28,7 +22,6 @@ import {
   AlertCircle,
 } from 'lucide-react'
 
-// Import your actual permissions hook
 import { usePermissions } from '@/lib/hooks/usePermissions'
 
 export const PermissionWrapper = ({
@@ -55,9 +48,57 @@ export const PermissionWrapper = ({
   return children
 }
 
-// API functions
+const FILE_SIZE_LIMITS = {
+  document: 300 * 1024 * 1024,
+  video: 1.5 * 1024 * 1024 * 1024,
+  image: 50 * 1024 * 1024,
+  default: 100 * 1024 * 1024,
+}
+
+const DOCUMENT_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+]
+
+const VIDEO_TYPES = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/avi', 'video/webm']
+
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
+const getFileSizeLimit = mimeType => {
+  if (DOCUMENT_TYPES.includes(mimeType)) {
+    return FILE_SIZE_LIMITS.document
+  }
+  if (VIDEO_TYPES.includes(mimeType)) {
+    return FILE_SIZE_LIMITS.video
+  }
+  if (IMAGE_TYPES.includes(mimeType)) {
+    return FILE_SIZE_LIMITS.image
+  }
+  return FILE_SIZE_LIMITS.default
+}
+
+const validateFileSize = (fileSize, mimeType) => {
+  const limit = getFileSizeLimit(mimeType)
+  if (fileSize > limit) {
+    const limitMB = Math.round(limit / 1024 / 1024)
+    const limitGB = limitMB >= 1024 ? (limitMB / 1024).toFixed(1) + 'GB' : limitMB + 'MB'
+    throw new Error(`File size exceeds ${limitGB} limit for this file type`)
+  }
+  return true
+}
+
+const shouldUseDirectUpload = fileSize => {
+  return fileSize > 4 * 1024 * 1024
+}
+
 const resourcesApi = {
-  // Fetch resources with filters
   fetchResources: async filters => {
     const params = new URLSearchParams({
       search: filters.search || '',
@@ -81,8 +122,7 @@ const resourcesApi = {
     return data.data
   },
 
-  // Upload resource
-  uploadResource: async formData => {
+  uploadResourceSmall: async formData => {
     const response = await fetch('/api/resources', {
       method: 'POST',
       body: formData,
@@ -101,7 +141,82 @@ const resourcesApi = {
     return data.data.resource
   },
 
-  // Delete resource
+  getUploadUrl: async (fileName, fileType, fileSize) => {
+    const response = await fetch('/api/resources/upload-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fileName, fileType, fileSize }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    if (!data.success) {
+      throw new Error(data.error?.message || 'Failed to get upload URL')
+    }
+
+    return data.data
+  },
+
+  uploadToS3: async (presignedUrl, file, onProgress) => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+
+      xhr.upload.addEventListener('progress', e => {
+        if (e.lengthComputable && onProgress) {
+          onProgress((e.loaded / e.total) * 100)
+        }
+      })
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          resolve()
+        } else {
+          reject(new Error('Upload failed'))
+        }
+      })
+
+      xhr.addEventListener('error', () => {
+        reject(new Error('Upload failed'))
+      })
+
+      xhr.open('PUT', presignedUrl)
+      xhr.setRequestHeader('Content-Type', file.type)
+      xhr.send(file)
+    })
+  },
+
+  createFromDirectUpload: async (resourceData, uploadedFileData) => {
+    const response = await fetch('/api/resources', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'direct_upload',
+        resourceData,
+        uploadedFileData,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    if (!data.success) {
+      throw new Error(data.error?.message || 'Failed to create resource')
+    }
+
+    return data.data.resource
+  },
+
   deleteResource: async resourceId => {
     const response = await fetch(`/api/resources/${resourceId}`, {
       method: 'DELETE',
@@ -120,7 +235,6 @@ const resourcesApi = {
     return data
   },
 
-  // Get download URL
   getDownloadUrl: async resourceId => {
     const response = await fetch(`/api/resources/${resourceId}/download`)
 
@@ -142,7 +256,6 @@ const ResourcesPage = () => {
   const { hasPermission } = usePermissions()
   const queryClient = useQueryClient()
 
-  // State
   const [viewMode, setViewMode] = useState('grid')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedType, setSelectedType] = useState('all')
@@ -153,7 +266,6 @@ const ResourcesPage = () => {
   const [previewResource, setPreviewResource] = useState(null)
   const [notification, setNotification] = useState(null)
 
-  // Query for fetching resources
   const {
     data: resourcesData,
     isLoading,
@@ -180,12 +292,37 @@ const ResourcesPage = () => {
         limit: 50,
       }),
     keepPreviousData: true,
-    staleTime: 30000, // 30 seconds
+    staleTime: 30000,
   })
 
-  // Upload mutation
   const uploadMutation = useMutation({
-    mutationFn: resourcesApi.uploadResource,
+    mutationFn: async ({ resourceData, file }) => {
+      validateFileSize(file.size, file.type)
+
+      if (shouldUseDirectUpload(file.size)) {
+        const uploadData = await resourcesApi.getUploadUrl(file.name, file.type, file.size)
+        await resourcesApi.uploadToS3(uploadData.presignedUrl, file)
+
+        const uploadedFileData = {
+          fileUrl: uploadData.fileUrl,
+          fileName: uploadData.originalName,
+          fileSize: file.size,
+          mimeType: file.type,
+        }
+
+        return resourcesApi.createFromDirectUpload(resourceData, uploadedFileData)
+      } else {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('title', resourceData.title)
+        formData.append('description', resourceData.description || '')
+        formData.append('category', resourceData.category || '')
+        formData.append('isPublic', resourceData.isPublic.toString())
+        formData.append('tags', JSON.stringify(resourceData.tags || []))
+
+        return resourcesApi.uploadResourceSmall(formData)
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resources'] })
       setShowUploadModal(false)
@@ -196,7 +333,6 @@ const ResourcesPage = () => {
     },
   })
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: resourcesApi.deleteResource,
     onSuccess: () => {
@@ -208,7 +344,6 @@ const ResourcesPage = () => {
     },
   })
 
-  // Download mutation
   const downloadMutation = useMutation({
     mutationFn: resourcesApi.getDownloadUrl,
     onSuccess: (data, resourceId) => {
@@ -219,18 +354,15 @@ const ResourcesPage = () => {
     },
   })
 
-  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
   }, [searchQuery, selectedType, selectedCategory])
 
-  // Show notification
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type })
     setTimeout(() => setNotification(null), 3000)
   }
 
-  // Format file size
   const formatFileSize = bytes => {
     if (bytes === 0) return '0 Bytes'
     const k = 1024
@@ -239,7 +371,6 @@ const ResourcesPage = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  // Get file type icon
   const getFileIcon = (type, mimeType) => {
     if (type === 'VIDEO' || mimeType?.startsWith('video/')) {
       return <Video className="w-5 h-5" />
@@ -250,37 +381,30 @@ const ResourcesPage = () => {
     return <FileText className="w-5 h-5" />
   }
 
-  // Handle resource preview
   const handlePreview = resource => {
     setPreviewResource(resource)
     setShowPreviewModal(true)
   }
 
-  // Handle resource download
   const handleDownload = resource => {
     showNotification(`Downloading ${resource.fileName}...`, 'info')
     downloadMutation.mutate(resource.id)
   }
 
-  // Handle resource delete
   const handleDelete = resourceId => {
     if (!confirm('Are you sure you want to delete this resource?')) return
     deleteMutation.mutate(resourceId)
   }
 
-  // Handle upload
-  const handleUpload = formData => {
-    uploadMutation.mutate(formData)
+  const handleUpload = (resourceData, file) => {
+    uploadMutation.mutate({ resourceData, file })
   }
 
-  // Get resources and pagination from query data
   const resources = resourcesData?.resources || []
   const pagination = resourcesData?.pagination || { page: 1, totalPages: 0, total: 0, limit: 50 }
 
-  // Get unique categories from resources
   const categories = [...new Set(resources.map(r => r.category).filter(Boolean))]
 
-  // Handle error state
   if (isError) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
@@ -301,7 +425,6 @@ const ResourcesPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Header */}
       <div className="bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-6">
@@ -329,11 +452,9 @@ const ResourcesPage = () => {
         </div>
       </div>
 
-      {/* Filters and Search */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-            {/* Search */}
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
               <input
@@ -345,7 +466,6 @@ const ResourcesPage = () => {
               />
             </div>
 
-            {/* Filters */}
             <div className="flex items-center space-x-4">
               <select
                 value={selectedType}
@@ -371,7 +491,6 @@ const ResourcesPage = () => {
                 ))}
               </select>
 
-              {/* View Mode */}
               <div className="flex items-center border border-slate-300 rounded-lg">
                 <button
                   onClick={() => setViewMode('grid')}
@@ -391,7 +510,6 @@ const ResourcesPage = () => {
         </div>
       </div>
 
-      {/* Resources */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -469,7 +587,6 @@ const ResourcesPage = () => {
           </div>
         )}
 
-        {/* Pagination */}
         {pagination.totalPages > 1 && (
           <div className="mt-8 flex items-center justify-between">
             <div className="text-sm text-slate-700">
@@ -519,7 +636,6 @@ const ResourcesPage = () => {
         )}
       </div>
 
-      {/* Preview Modal */}
       {showPreviewModal && previewResource && (
         <PreviewModal
           resource={previewResource}
@@ -530,7 +646,6 @@ const ResourcesPage = () => {
         />
       )}
 
-      {/* Upload Modal */}
       {showUploadModal && (
         <UploadModal
           onClose={() => setShowUploadModal(false)}
@@ -539,7 +654,6 @@ const ResourcesPage = () => {
         />
       )}
 
-      {/* Notification */}
       {notification && (
         <Notification
           message={notification.message}
@@ -551,7 +665,6 @@ const ResourcesPage = () => {
   )
 }
 
-// Resource Card Component
 const ResourceCard = ({
   resource,
   onDownload,
@@ -562,29 +675,38 @@ const ResourceCard = ({
   isDeleting,
   isDownloading,
 }) => {
-  // Check if resource can be previewed
   const canPreview = resource => {
     const previewableTypes = ['image/', 'application/pdf', 'text/', 'video/']
     return previewableTypes.some(type => resource.mimeType?.startsWith(type))
   }
 
+  const truncateText = (text, maxLength) => {
+    if (!text) return ''
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
       <div className="p-6">
-        {/* Header */}
         <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-slate-100 rounded-lg">
+          <div className="flex items-center space-x-3 min-w-0 flex-1">
+            <div className="p-2 bg-slate-100 rounded-lg flex-shrink-0">
               {getFileIcon(resource.type, resource.mimeType)}
             </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-slate-900 truncate" title={resource.title}>
+            <div className="min-w-0 flex-1">
+              <h3
+                className="text-sm font-medium text-slate-900 truncate cursor-help"
+                title={resource.title}
+              >
                 {resource.title}
               </h3>
-              <p className="text-xs text-slate-500">{resource.fileName}</p>
+              <p className="text-xs text-slate-500 truncate cursor-help" title={resource.fileName}>
+                {resource.fileName}
+              </p>
             </div>
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
             {resource.isPublic ? (
               <Globe className="w-4 h-4 text-green-500" title="Public" />
             ) : (
@@ -593,29 +715,47 @@ const ResourceCard = ({
           </div>
         </div>
 
-        {/* Description */}
         {resource.description && (
-          <p className="text-sm text-slate-600 mb-4 line-clamp-2">{resource.description}</p>
+          <div className="mb-4">
+            <p
+              className="text-sm text-slate-600 leading-5 cursor-help"
+              style={{
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                lineHeight: '1.25rem',
+                maxHeight: '2.5rem',
+              }}
+              title={resource.description}
+            >
+              {resource.description}
+            </p>
+          </div>
         )}
 
-        {/* Tags */}
         {resource.tags && resource.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-4">
-            {resource.tags.slice(0, 3).map(tag => (
+            {resource.tags.slice(0, 5).map(tag => (
               <span
                 key={tag}
-                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 max-w-[120px]"
+                title={tag}
               >
-                {tag}
+                <span className="truncate">{truncateText(tag, 15)}</span>
               </span>
             ))}
-            {resource.tags.length > 3 && (
-              <span className="text-xs text-slate-500">+{resource.tags.length - 3} more</span>
+            {resource.tags.length > 5 && (
+              <span
+                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 cursor-help"
+                title={`Additional tags: ${resource.tags.slice(5).join(', ')}`}
+              >
+                +{resource.tags.length - 5} more
+              </span>
             )}
           </div>
         )}
 
-        {/* Footer */}
         <div className="flex items-center justify-between pt-4 border-t border-slate-100">
           <div className="flex items-center space-x-4 text-xs text-slate-500">
             <span>{formatFileSize(resource.fileSize)}</span>
@@ -658,7 +798,6 @@ const ResourceCard = ({
   )
 }
 
-// Resource Row Component for List View
 const ResourceRow = ({
   resource,
   onDownload,
@@ -669,7 +808,6 @@ const ResourceRow = ({
   isDeleting,
   isDownloading,
 }) => {
-  // Check if resource can be previewed
   const canPreview = resource => {
     const previewableTypes = ['image/', 'application/pdf', 'text/', 'video/']
     return previewableTypes.some(type => resource.mimeType?.startsWith(type))
@@ -734,7 +872,6 @@ const ResourceRow = ({
   )
 }
 
-// Preview Modal Component
 const PreviewModal = ({ resource, onClose }) => {
   const getPreviewContent = () => {
     const { mimeType, fileUrl, fileName } = resource
@@ -794,7 +931,6 @@ const PreviewModal = ({ resource, onClose }) => {
       )
     }
 
-    // Default preview not available
     return (
       <div className="flex flex-col items-center justify-center p-12 text-slate-500">
         <FileText className="w-16 h-16 mb-4" />
@@ -816,7 +952,6 @@ const PreviewModal = ({ resource, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-slate-100 rounded-lg">
@@ -851,10 +986,8 @@ const PreviewModal = ({ resource, onClose }) => {
           </div>
         </div>
 
-        {/* Content */}
         <div className="overflow-auto max-h-[calc(90vh-120px)]">{getPreviewContent()}</div>
 
-        {/* Footer */}
         <div className="p-4 border-t border-slate-200 bg-slate-50">
           <div className="flex items-center justify-between text-sm text-slate-600">
             <div className="flex items-center space-x-4">
@@ -885,7 +1018,6 @@ const PreviewModal = ({ resource, onClose }) => {
   )
 }
 
-// Upload Modal Component
 const UploadModal = ({ onClose, onUpload, isUploading }) => {
   const [dragActive, setDragActive] = useState(false)
   const [file, setFile] = useState(null)
@@ -895,6 +1027,19 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
   const [isPublic, setIsPublic] = useState(false)
   const [tags, setTags] = useState([])
   const [tagInput, setTagInput] = useState('')
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [sizeError, setSizeError] = useState('')
+
+  const validateFile = selectedFile => {
+    try {
+      validateFileSize(selectedFile.size, selectedFile.type)
+      setSizeError('')
+      return true
+    } catch (error) {
+      setSizeError(error.message)
+      return false
+    }
+  }
 
   const handleDrag = e => {
     e.preventDefault()
@@ -913,16 +1058,20 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0]
-      setFile(droppedFile)
-      if (!title) setTitle(droppedFile.name.split('.')[0])
+      if (validateFile(droppedFile)) {
+        setFile(droppedFile)
+        if (!title) setTitle(droppedFile.name.split('.')[0])
+      }
     }
   }
 
   const handleFileSelect = e => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0]
-      setFile(selectedFile)
-      if (!title) setTitle(selectedFile.name.split('.')[0])
+      if (validateFile(selectedFile)) {
+        setFile(selectedFile)
+        if (!title) setTitle(selectedFile.name.split('.')[0])
+      }
     }
   }
 
@@ -938,17 +1087,37 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
   }
 
   const handleSubmit = () => {
-    if (!file || !title.trim()) return
+    if (!file || !title.trim() || sizeError) return
 
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('title', title.trim())
-    formData.append('description', description.trim())
-    formData.append('category', category.trim())
-    formData.append('isPublic', isPublic.toString())
-    formData.append('tags', JSON.stringify(tags))
+    const resourceData = {
+      title: title.trim(),
+      description: description.trim(),
+      category: category.trim(),
+      isPublic,
+      tags,
+    }
 
-    onUpload(formData)
+    onUpload(resourceData, file)
+  }
+
+  const getFileSizeInfo = () => {
+    if (!file) return null
+
+    const limit = getFileSizeLimit(file.type)
+    const limitText =
+      limit >= 1024 * 1024 * 1024
+        ? `${(limit / 1024 / 1024 / 1024).toFixed(1)}GB`
+        : `${Math.round(limit / 1024 / 1024)}MB`
+
+    const fileType = DOCUMENT_TYPES.includes(file.type)
+      ? 'document'
+      : VIDEO_TYPES.includes(file.type)
+        ? 'video'
+        : IMAGE_TYPES.includes(file.type)
+          ? 'image'
+          : 'file'
+
+    return `${fileType} (max ${limitText})`
   }
 
   return (
@@ -966,7 +1135,6 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
         </div>
 
         <div className="p-6 space-y-6">
-          {/* File Upload */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">File</label>
             <div
@@ -974,7 +1142,9 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
                 dragActive
                   ? 'border-blue-400 bg-blue-50'
                   : file
-                    ? 'border-green-400 bg-green-50'
+                    ? sizeError
+                      ? 'border-red-400 bg-red-50'
+                      : 'border-green-400 bg-green-50'
                     : 'border-slate-300 hover:border-slate-400'
               }`}
               onDragEnter={handleDrag}
@@ -984,11 +1154,24 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
             >
               {file ? (
                 <div className="space-y-2">
-                  <CheckCircle className="w-8 h-8 text-green-500 mx-auto" />
+                  {sizeError ? (
+                    <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
+                  ) : (
+                    <CheckCircle className="w-8 h-8 text-green-500 mx-auto" />
+                  )}
                   <p className="text-sm font-medium text-slate-900">{file.name}</p>
                   <p className="text-xs text-slate-500">
-                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                    {(file.size / 1024 / 1024).toFixed(2)} MB • {getFileSizeInfo()}
                   </p>
+                  {sizeError && <p className="text-xs text-red-600">{sizeError}</p>}
+                  {isUploading && (
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1001,19 +1184,20 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
                         type="file"
                         className="hidden"
                         onChange={handleFileSelect}
-                        accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp4,.mov,.avi"
+                        accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp4,.mov,.avi,.webm"
                       />
                     </label>
                   </p>
-                  <p className="text-xs text-slate-500">
-                    Supports: PDF, Word, Images, Videos (max 100MB)
-                  </p>
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <p>Documents: PDF, Word, Text (max 300MB)</p>
+                    <p>Images: JPG, PNG, GIF, WebP (max 50MB)</p>
+                    <p>Videos: MP4, MOV, AVI, WebM (max 1.5GB)</p>
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Title */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Title *</label>
             <input
@@ -1026,7 +1210,6 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
             />
           </div>
 
-          {/* Description */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
             <textarea
@@ -1038,7 +1221,6 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
             />
           </div>
 
-          {/* Category */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Category</label>
             <input
@@ -1050,7 +1232,6 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
             />
           </div>
 
-          {/* Tags */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Tags</label>
             <div className="flex flex-wrap gap-2 mb-2">
@@ -1089,7 +1270,6 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
             </div>
           </div>
 
-          {/* Public/Private */}
           <div>
             <label className="flex items-center space-x-2">
               <input
@@ -1105,7 +1285,6 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
             </p>
           </div>
 
-          {/* Actions */}
           <div className="flex justify-end space-x-3 pt-6 border-t border-slate-200">
             <button
               type="button"
@@ -1117,7 +1296,7 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!file || !title.trim() || isUploading}
+              disabled={!file || !title.trim() || isUploading || !!sizeError}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isUploading ? 'Uploading...' : 'Upload Resource'}
@@ -1129,7 +1308,6 @@ const UploadModal = ({ onClose, onUpload, isUploading }) => {
   )
 }
 
-// Notification Component
 const Notification = ({ message, type, onClose }) => {
   const icons = {
     success: CheckCircle,
