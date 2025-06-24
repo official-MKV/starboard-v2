@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useAuth, useRequireWorkspace } from '@/lib/hooks/auth'
+import { useState, useEffect, useMemo } from 'react'
+import { useRequireWorkspace } from '@/lib/hooks/auth'
 import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog,
@@ -45,43 +44,301 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
   Plus,
   Users,
   UserPlus,
   Mail,
   Shield,
-  Settings,
   Edit,
   Trash2,
   MoreHorizontal,
   Search,
-  Filter,
   Send,
   Copy,
   Eye,
-  EyeOff,
   CheckCircle,
   Clock,
   XCircle,
-  AlertCircle,
   Loader2,
   Crown,
   Calendar,
   ExternalLink,
-  Download,
-  Upload,
   FileText,
-  Palette,
   Save,
   X,
   RefreshCw,
   ArrowUpDown,
   ChevronUp,
   ChevronDown,
+  Info,
+  Link2,
+  UserCheck,
+  UserX,
+  AlertTriangle,
+  ArrowRightLeft,
+  Check,
+  ChevronsUpDown,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 import RoleManagement from './rolemanagement'
 import InviteUsersForm from './inviteUsers'
+
+function UserSearchSelect({
+  endpoint,
+  value,
+  onValueChange,
+  placeholder = 'Search users...',
+  label,
+  required = false,
+  disabled = false,
+  className,
+}) {
+  const [open, setOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [users, setUsers] = useState([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [selectedUser, setSelectedUser] = useState(null)
+
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchUsers(searchTerm)
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm, endpoint])
+
+  // Find selected user when value changes
+  useEffect(() => {
+    if (value && users.length > 0) {
+      const user = users.find(u => u.id === value)
+      setSelectedUser(user)
+    } else {
+      setSelectedUser(null)
+    }
+  }, [value, users])
+
+  const fetchUsers = async (search = '') => {
+    setIsLoading(true)
+    try {
+      const queryParams = new URLSearchParams()
+      if (search) queryParams.append('search', search)
+
+      const response = await fetch(`${endpoint}?${queryParams}`)
+      if (response.ok) {
+        const data = await response.json()
+        setUsers(data.data.mentors || data.data.mentees || [])
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSelect = userId => {
+    const user = users.find(u => u.id === userId)
+    setSelectedUser(user)
+    onValueChange(userId)
+    setOpen(false)
+  }
+
+  const filteredUsers = useMemo(() => {
+    if (!searchTerm) return users
+    return users.filter(
+      user =>
+        `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }, [users, searchTerm])
+
+  return (
+    <div className={className}>
+      {label && (
+        <Label className="text-sm font-medium text-gray-700 mb-2 block">
+          {label} {required && <span className="text-red-500">*</span>}
+        </Label>
+      )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between"
+            disabled={disabled}
+          >
+            {selectedUser ? (
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
+                  {selectedUser.firstName?.[0]}
+                  {selectedUser.lastName?.[0]}
+                </div>
+                <span className="truncate">
+                  {selectedUser.firstName} {selectedUser.lastName}
+                </span>
+                {selectedUser.role && (
+                  <Badge
+                    variant="outline"
+                    className="text-xs"
+                    style={{ borderColor: selectedUser.role.color, color: selectedUser.role.color }}
+                  >
+                    {selectedUser.role.name}
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <span className="text-gray-500">{placeholder}</span>
+            )}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-full p-0"
+          style={{ width: 'var(--radix-popover-trigger-width)' }}
+        >
+          <Command>
+            <CommandInput
+              placeholder="Search users..."
+              value={searchTerm}
+              onValueChange={setSearchTerm}
+            />
+            <CommandList>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="ml-2 text-sm text-gray-500">Searching...</span>
+                </div>
+              ) : filteredUsers.length === 0 ? (
+                <CommandEmpty>No users found.</CommandEmpty>
+              ) : (
+                <CommandGroup>
+                  {filteredUsers.map(user => (
+                    <CommandItem
+                      key={user.id}
+                      value={user.id}
+                      onSelect={() => handleSelect(user.id)}
+                    >
+                      <div className="flex items-center space-x-3 w-full">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-sm font-medium">
+                          {user.firstName?.[0]}
+                          {user.lastName?.[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium truncate">
+                              {user.firstName} {user.lastName}
+                            </span>
+                            {user.role && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs"
+                                style={{ borderColor: user.role.color, color: user.role.color }}
+                              >
+                                {user.role.name}
+                              </Badge>
+                            )}
+                            {user.activeMenteeCount !== undefined && (
+                              <Badge variant="secondary" className="text-xs">
+                                {user.activeMenteeCount} mentees
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-500 truncate">{user.email}</div>
+                          {(user.jobTitle || user.company) && (
+                            <div className="text-xs text-gray-400 truncate">
+                              {user.jobTitle && user.company
+                                ? `${user.jobTitle} at ${user.company}`
+                                : user.jobTitle || user.company}
+                            </div>
+                          )}
+                        </div>
+                        <Check
+                          className={cn(
+                            'ml-auto h-4 w-4',
+                            value === user.id ? 'opacity-100' : 'opacity-0'
+                          )}
+                        />
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
+
+function MentorSearchSelect({ value, onValueChange, disabled = false, className }) {
+  return (
+    <UserSearchSelect
+      endpoint="/api/mentorship/eligible-mentors"
+      value={value}
+      onValueChange={onValueChange}
+      placeholder="Search for mentor..."
+      label="Mentor"
+      required
+      disabled={disabled}
+      className={className}
+    />
+  )
+}
+
+function MenteeSearchSelect({ value, onValueChange, disabled = false, className }) {
+  return (
+    <UserSearchSelect
+      endpoint="/api/mentorship/eligible-mentees"
+      value={value}
+      onValueChange={onValueChange}
+      placeholder="Search for mentee..."
+      label="Mentee"
+      required
+      disabled={disabled}
+      className={className}
+    />
+  )
+}
+
+function ReassignmentUserSelect({
+  type, // 'mentor' or 'mentee'
+  value,
+  onValueChange,
+  currentUserId,
+  disabled = false,
+  className,
+}) {
+  const endpoint =
+    type === 'mentor' ? '/api/mentorship/eligible-mentors' : '/api/mentorship/eligible-mentees'
+
+  const placeholder = type === 'mentor' ? 'Search for new mentor...' : 'Search for new mentee...'
+
+  const label = type === 'mentor' ? 'New Mentor (Optional)' : 'New Mentee (Optional)'
+
+  return (
+    <UserSearchSelect
+      endpoint={endpoint}
+      value={value}
+      onValueChange={onValueChange}
+      placeholder={placeholder}
+      label={label}
+      disabled={disabled}
+      className={className}
+    />
+  )
+}
 
 export default function UsersManagement() {
   const { user, workspace, isLoading: requireLoading } = useRequireWorkspace()
@@ -134,6 +391,14 @@ export default function UsersManagement() {
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
 
+  // Mentorship state
+  const [mentorshipAssignments, setMentorshipAssignments] = useState([])
+  const [mentorshipStatistics, setMentorshipStatistics] = useState(null)
+  const [overdueAssignments, setOverdueAssignments] = useState([])
+  const [isCreateAssignmentDialogOpen, setIsCreateAssignmentDialogOpen] = useState(false)
+  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false)
+  const [selectedAssignment, setSelectedAssignment] = useState(null)
+
   // Statistics
   const [statistics, setStatistics] = useState({
     totalUsers: 0,
@@ -149,6 +414,25 @@ export default function UsersManagement() {
     subject: '',
     content: '',
     isActive: true,
+  })
+
+  const [assignmentForm, setAssignmentForm] = useState({
+    mentorId: '',
+    menteeId: '',
+    notes: '',
+  })
+
+  const [reassignForm, setReassignForm] = useState({
+    newMentorId: '',
+    newMenteeId: '',
+    reason: '',
+  })
+
+  const [mentorshipFilters, setMentorshipFilters] = useState({
+    search: '',
+    status: 'all',
+    mentorId: '',
+    menteeId: '',
   })
 
   // Helper functions
@@ -168,6 +452,9 @@ export default function UsersManagement() {
       ACCEPTED: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Accepted' },
       EXPIRED: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Expired' },
       CANCELLED: { color: 'bg-gray-100 text-gray-800', icon: XCircle, label: 'Cancelled' },
+      ACTIVE: { color: 'bg-green-100 text-green-800', label: 'Active' },
+      PAUSED: { color: 'bg-yellow-100 text-yellow-800', label: 'Paused' },
+      TERMINATED: { color: 'bg-red-100 text-red-800', label: 'Terminated' },
     }
 
     const config = statusConfig[status] || statusConfig.PENDING
@@ -175,7 +462,7 @@ export default function UsersManagement() {
 
     return (
       <Badge className={config.color}>
-        <Icon className="mr-1 h-3 w-3" />
+        {Icon && <Icon className="mr-1 h-3 w-3" />}
         {config.label}
       </Badge>
     )
@@ -183,12 +470,15 @@ export default function UsersManagement() {
 
   // Fetch functions
   useEffect(() => {
-    fetchRoles()
-    fetchUsers()
-    fetchInvitations()
-    fetchEmailTemplates()
-    fetchStatistics()
-  }, [])
+    if (!requireLoading) {
+      fetchRoles()
+      fetchUsers()
+      fetchInvitations()
+      fetchEmailTemplates()
+      fetchStatistics()
+      fetchMentorshipData()
+    }
+  }, [requireLoading])
 
   const fetchUsers = async (page = 1) => {
     try {
@@ -259,6 +549,36 @@ export default function UsersManagement() {
       }
     } catch (error) {
       console.error('Error fetching email templates:', error)
+    }
+  }
+
+  const fetchMentorshipData = async () => {
+    try {
+      const [assignmentsRes, statisticsRes] = await Promise.all([
+        fetch(
+          `/api/mentorship/assignments?${new URLSearchParams({
+            ...(mentorshipFilters.status !== 'all' && { status: mentorshipFilters.status }),
+            ...(mentorshipFilters.search && { search: mentorshipFilters.search }),
+            ...(mentorshipFilters.mentorId && { mentorId: mentorshipFilters.mentorId }),
+            ...(mentorshipFilters.menteeId && { menteeId: mentorshipFilters.menteeId }),
+          })}`
+        ),
+        fetch('/api/mentorship/statistics'),
+      ])
+
+      if (assignmentsRes.ok) {
+        const assignmentsData = await assignmentsRes.json()
+        setMentorshipAssignments(assignmentsData.data.assignments)
+      }
+
+      if (statisticsRes.ok) {
+        const statisticsData = await statisticsRes.json()
+        setMentorshipStatistics(statisticsData.data.statistics)
+        setOverdueAssignments(statisticsData.data.overdueAssignments || [])
+      }
+    } catch (error) {
+      console.error('Error fetching mentorship data:', error)
+      toast.error('Failed to load mentorship data')
     }
   }
 
@@ -354,7 +674,7 @@ export default function UsersManagement() {
         </span>
         <Select
           value={pagination.itemsPerPage.toString()}
-          onValueChange={value => onItemsPerPageChange(parseInt(value))}
+          onValueChange={value => onItemsPerPageChange(Number.parseInt(value))}
         >
           <SelectTrigger className="w-20">
             <SelectValue />
@@ -448,7 +768,7 @@ export default function UsersManagement() {
     </Button>
   )
 
-  // Template handlers (keeping existing)
+  // Template handlers
   const handleCreateTemplate = async () => {
     if (!templateForm.name.trim() || !templateForm.subject.trim() || !templateForm.content.trim()) {
       toast.error('Please fill in all required fields')
@@ -599,6 +919,106 @@ export default function UsersManagement() {
     }
   }
 
+  // Mentorship handlers
+  const handleCreateAssignment = async () => {
+    if (!assignmentForm.mentorId || !assignmentForm.menteeId) {
+      toast.error('Mentor and mentee are required')
+      return
+    }
+
+    if (assignmentForm.mentorId === assignmentForm.menteeId) {
+      toast.error('Mentor and mentee must be different users')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/mentorship/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(assignmentForm),
+      })
+
+      if (response.ok) {
+        toast.success('Pairing created successfully')
+        setIsCreateAssignmentDialogOpen(false)
+        resetAssignmentForm()
+        fetchMentorshipData()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || 'Failed to create assignment')
+      }
+    } catch (error) {
+      console.error('Error creating assignment:', error)
+      toast.error('An unexpected error occurred')
+    }
+  }
+
+  const handleReassignAssignment = async () => {
+    if (!reassignForm.reason.trim()) {
+      toast.error('Reason is required for reassignment')
+      return
+    }
+
+    if (!reassignForm.newMentorId && !reassignForm.newMenteeId) {
+      toast.error('Either new mentor or new mentee must be selected')
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/mentorship/assignments/${selectedAssignment.id}/reassign`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reassignForm),
+        }
+      )
+
+      if (response.ok) {
+        toast.success('Assignment reassigned successfully')
+        setIsReassignDialogOpen(false)
+        setSelectedAssignment(null)
+        resetReassignForm()
+        fetchMentorshipData()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || 'Failed to reassign assignment')
+      }
+    } catch (error) {
+      console.error('Error reassigning assignment:', error)
+      toast.error('An unexpected error occurred')
+    }
+  }
+
+  const handleTerminateAssignment = async (assignment, reason = '') => {
+    if (
+      !confirm(
+        `Are you sure you want to terminate the mentorship between ${assignment.mentor.firstName} ${assignment.mentor.lastName} and ${assignment.mentee.firstName} ${assignment.mentee.lastName}?`
+      )
+    ) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/mentorship/assignments/${assignment.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+
+      if (response.ok) {
+        toast.success('Assignment terminated successfully')
+        fetchMentorshipData()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || 'Failed to terminate assignment')
+      }
+    } catch (error) {
+      console.error('Error terminating assignment:', error)
+      toast.error('An unexpected error occurred')
+    }
+  }
+
   const resetTemplateForm = () => {
     setTemplateForm({
       name: '',
@@ -607,6 +1027,22 @@ export default function UsersManagement() {
       subject: '',
       content: '',
       isActive: true,
+    })
+  }
+
+  const resetAssignmentForm = () => {
+    setAssignmentForm({
+      mentorId: '',
+      menteeId: '',
+      notes: '',
+    })
+  }
+
+  const resetReassignForm = () => {
+    setReassignForm({
+      newMentorId: '',
+      newMenteeId: '',
+      reason: '',
     })
   }
 
@@ -629,12 +1065,30 @@ export default function UsersManagement() {
     fetchStatistics()
   }
 
+  const filteredMentorshipAssignments = mentorshipAssignments.filter(assignment => {
+    const matchesSearch =
+      assignment.mentor.firstName.toLowerCase().includes(mentorshipFilters.search.toLowerCase()) ||
+      assignment.mentor.lastName.toLowerCase().includes(mentorshipFilters.search.toLowerCase()) ||
+      assignment.mentee.firstName.toLowerCase().includes(mentorshipFilters.search.toLowerCase()) ||
+      assignment.mentee.lastName.toLowerCase().includes(mentorshipFilters.search.toLowerCase()) ||
+      assignment.mentor.email.toLowerCase().includes(mentorshipFilters.search.toLowerCase()) ||
+      assignment.mentee.email.toLowerCase().includes(mentorshipFilters.search.toLowerCase())
+
+    const matchesStatus =
+      mentorshipFilters.status === 'all' || assignment.status === mentorshipFilters.status
+
+    return matchesSearch && matchesStatus
+  })
+
   if (requireLoading) {
     return (
       <div className="min-h-screen bg-snow-100 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-slate-gray-600">Loading users...</p>
+          <div className="relative">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+            <div className="absolute inset-0 h-12 w-12 rounded-full border-2 border-primary/20 mx-auto"></div>
+          </div>
+          <p className="text-slate-gray-600">Loading workspace...</p>
         </div>
       </div>
     )
@@ -648,7 +1102,7 @@ export default function UsersManagement() {
           <div>
             <h1 className="text-3xl font-bold text-charcoal-900">User Management</h1>
             <p className="text-slate-gray-600 mt-2">
-              Manage users, roles, invitations, and email templates
+              Manage users, roles, invitations, email templates, and mentorship assignments
             </p>
           </div>
           <div className="flex items-center space-x-3">
@@ -722,16 +1176,16 @@ export default function UsersManagement() {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="invitations">Invitations</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
             <TabsTrigger value="templates">Email Templates</TabsTrigger>
+            <TabsTrigger value="pairing">Pairing</TabsTrigger>
           </TabsList>
 
           {/* Users Tab */}
           <TabsContent value="users" className="space-y-6">
-            {/* Filters */}
             <Card className="starboard-card">
               <CardContent className="py-4">
                 <div className="flex items-center space-x-4">
@@ -785,7 +1239,6 @@ export default function UsersManagement() {
               </CardContent>
             </Card>
 
-            {/* Users Table */}
             <Card className="starboard-card">
               <CardHeader>
                 <CardTitle>Users ({usersPagination.totalItems})</CardTitle>
@@ -864,6 +1317,24 @@ export default function UsersManagement() {
                                 {user.role.isDefault && (
                                   <Crown className="h-3 w-3 text-yellow-500" />
                                 )}
+                                <div className="flex flex-wrap gap-1 ml-2">
+                                  {user.role.canMentor && (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-blue-50 text-blue-700 border-blue-200 text-xs"
+                                    >
+                                      Mentor
+                                    </Badge>
+                                  )}
+                                  {user.role.canBeMentee && (
+                                    <Badge
+                                      variant="outline"
+                                      className="bg-green-50 text-green-700 border-green-200 text-xs"
+                                    >
+                                      Mentee
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </TableCell>
@@ -1086,7 +1557,7 @@ export default function UsersManagement() {
             <RoleManagement />
           </TabsContent>
 
-          {/* Email Templates Tab - keeping existing implementation */}
+          {/* Email Templates Tab */}
           <TabsContent value="templates" className="space-y-6">
             {/* Filters and Actions */}
             <Card className="starboard-card">
@@ -1363,6 +1834,439 @@ The {{workspace_name}} Team`}
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Mentorships Tab */}
+          <TabsContent value="pairing" className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-charcoal-900">Pairing Management</h2>
+                <p className="text-slate-gray-600 mt-1">
+                  Manage mentor-mentee pairings based on role capabilities
+                </p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <Button onClick={fetchMentorshipData} variant="outline">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+                <Button
+                  onClick={() => setIsCreateAssignmentDialogOpen(true)}
+                  className="starboard-button"
+                >
+                  <Link2 className="mr-2 h-4 w-4" />
+                  Create Pairing
+                </Button>
+              </div>
+            </div>
+
+            {/* Statistics Cards */}
+            {mentorshipStatistics && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <Card className="starboard-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-gray-600">Active Pairings</p>
+                        <p className="text-2xl font-bold text-charcoal-900">
+                          {mentorshipStatistics.activeAssignments}
+                        </p>
+                      </div>
+                      <UserCheck className="h-8 w-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="starboard-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-gray-600">Total Mentors</p>
+                        <p className="text-2xl font-bold text-charcoal-900">
+                          {mentorshipStatistics.totalMentors}
+                        </p>
+                      </div>
+                      <Users className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="starboard-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-gray-600">Total Mentees</p>
+                        <p className="text-2xl font-bold text-charcoal-900">
+                          {mentorshipStatistics.totalMentees}
+                        </p>
+                      </div>
+                      <UserX className="h-8 w-8 text-purple-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="starboard-card">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-gray-600">Overdue Meetings</p>
+                        <p className="text-2xl font-bold text-charcoal-900">
+                          {mentorshipStatistics.overdueAssignments}
+                        </p>
+                      </div>
+                      <AlertTriangle className="h-8 w-8 text-orange-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Overdue Meetings Alert */}
+            {overdueAssignments.length > 0 && (
+              <Card className="starboard-card border-orange-200 bg-orange-50">
+                <CardHeader>
+                  <CardTitle className="text-orange-800 flex items-center">
+                    <AlertTriangle className="mr-2 h-5 w-5" />
+                    Overdue Check-ins ({overdueAssignments.length})
+                  </CardTitle>
+                  <CardDescription className="text-orange-700">
+                    These pairs haven't had a check-in in over 30 days
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {overdueAssignments.slice(0, 5).map(assignment => (
+                      <div
+                        key={assignment.id}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        <span>
+                          {assignment.mentor.firstName} {assignment.mentor.lastName} →{' '}
+                          {assignment.mentee.firstName} {assignment.mentee.lastName}
+                        </span>
+                        <span className="text-orange-600">
+                          Due:{' '}
+                          {assignment.nextMeetingDue
+                            ? new Date(assignment.nextMeetingDue).toLocaleDateString()
+                            : 'No date set'}
+                        </span>
+                      </div>
+                    ))}
+                    {overdueAssignments.length > 5 && (
+                      <p className="text-sm text-orange-600">
+                        +{overdueAssignments.length - 5} more...
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Filters */}
+            <Card className="starboard-card">
+              <CardContent className="py-4">
+                <div className="flex items-center space-x-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-gray-400" />
+                    <Input
+                      placeholder="Search assignments by mentor, mentee, or email..."
+                      value={mentorshipFilters.search}
+                      onChange={e =>
+                        setMentorshipFilters(prev => ({ ...prev, search: e.target.value }))
+                      }
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select
+                    value={mentorshipFilters.status}
+                    onValueChange={value =>
+                      setMentorshipFilters(prev => ({ ...prev, status: value }))
+                    }
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue placeholder="All status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="ACTIVE">Active</SelectItem>
+                      <SelectItem value="PAUSED">Paused</SelectItem>
+                      <SelectItem value="TERMINATED">Terminated</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Assignments Table */}
+            <Card className="starboard-card">
+              <CardHeader>
+                <CardTitle>
+                  Mentor-Mentee Pairings ({filteredMentorshipAssignments.length})
+                </CardTitle>
+                <CardDescription>
+                  Manage mentor-mentee relationships and track progress
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mentor</TableHead>
+                      <TableHead>Mentee</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Meetings</TableHead>
+                      <TableHead>Last Meeting</TableHead>
+                      <TableHead>Next Due</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMentorshipAssignments.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <div className="text-slate-gray-500">
+                            <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>No pairings found</p>
+                            <p className="text-sm mt-2">Create your first pairing to get started</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredMentorshipAssignments.map(assignment => (
+                        <TableRow key={assignment.id}>
+                          <TableCell>
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-medium text-sm">
+                                {assignment.mentor.firstName?.[0]}
+                                {assignment.mentor.lastName?.[0]}
+                              </div>
+                              <div>
+                                <div className="font-medium">
+                                  {assignment.mentor.firstName} {assignment.mentor.lastName}
+                                </div>
+                                <div className="text-sm text-slate-gray-500">
+                                  {assignment.mentor.email}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white font-medium text-sm">
+                                {assignment.mentee.firstName?.[0]}
+                                {assignment.mentee.lastName?.[0]}
+                              </div>
+                              <div>
+                                <div className="font-medium">
+                                  {assignment.mentee.firstName} {assignment.mentee.lastName}
+                                </div>
+                                <div className="text-sm text-slate-gray-500">
+                                  {assignment.mentee.email}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(assignment.status)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              <Calendar className="h-4 w-4 text-slate-gray-400" />
+                              <span className="text-sm">{assignment.totalMeetings || 0}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {assignment.lastMeetingAt
+                                ? new Date(assignment.lastMeetingAt).toLocaleDateString()
+                                : 'Never'}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              {assignment.nextMeetingDue &&
+                              new Date(assignment.nextMeetingDue) < new Date() ? (
+                                <>
+                                  <Clock className="h-4 w-4 text-orange-500" />
+                                  <span className="text-sm text-orange-600">Overdue</span>
+                                </>
+                              ) : (
+                                <div className="text-sm">
+                                  {assignment.nextMeetingDue
+                                    ? new Date(assignment.nextMeetingDue).toLocaleDateString()
+                                    : 'Not set'}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedAssignment(assignment)
+                                    setReassignForm({
+                                      newMentorId: '',
+                                      newMenteeId: '',
+                                      reason: '',
+                                    })
+                                    setIsReassignDialogOpen(true)
+                                  }}
+                                >
+                                  <ArrowRightLeft className="mr-2 h-4 w-4" />
+                                  Reassign
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleTerminateAssignment(assignment)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Terminate
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Create Assignment Dialog */}
+            <Dialog
+              open={isCreateAssignmentDialogOpen}
+              onOpenChange={setIsCreateAssignmentDialogOpen}
+            >
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Create Mentor-Mentee Pairing</DialogTitle>
+                  <DialogDescription>
+                    Pair a mentor with a mentee in your workspace.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <MentorSearchSelect
+                      value={assignmentForm.mentorId}
+                      onValueChange={value =>
+                        setAssignmentForm(prev => ({ ...prev, mentorId: value }))
+                      }
+                    />
+                    <MenteeSearchSelect
+                      value={assignmentForm.menteeId}
+                      onValueChange={value =>
+                        setAssignmentForm(prev => ({ ...prev, menteeId: value }))
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="notes">Notes</Label>
+                    <Textarea
+                      id="notes"
+                      value={assignmentForm.notes}
+                      onChange={e =>
+                        setAssignmentForm(prev => ({ ...prev, notes: e.target.value }))
+                      }
+                      placeholder="Any additional notes or context for this mentorship..."
+                      rows={3}
+                      className="starboard-input"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-800">
+                      <Info className="inline h-4 w-4 mr-1" />
+                      Each mentee can have one active mentor. Mentors can have multiple mentees.
+                    </p>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateAssignmentDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateAssignment} className="starboard-button">
+                    Create Pairing
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Reassign Dialog */}
+            <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Reassign Mentorship</DialogTitle>
+                  <DialogDescription>
+                    Change the mentor or mentee in this assignment
+                  </DialogDescription>
+                </DialogHeader>
+
+                {selectedAssignment && (
+                  <div className="space-y-4">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-slate-gray-600">Current Assignment:</p>
+                      <p className="font-medium">
+                        {selectedAssignment.mentor.firstName} {selectedAssignment.mentor.lastName} →{' '}
+                        {selectedAssignment.mentee.firstName} {selectedAssignment.mentee.lastName}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <ReassignmentUserSelect
+                        type="mentor"
+                        value={reassignForm.newMentorId}
+                        onValueChange={value =>
+                          setReassignForm(prev => ({ ...prev, newMentorId: value }))
+                        }
+                        currentUserId={selectedAssignment?.mentorId}
+                      />
+                      <ReassignmentUserSelect
+                        type="mentee"
+                        value={reassignForm.newMenteeId}
+                        onValueChange={value =>
+                          setReassignForm(prev => ({ ...prev, newMenteeId: value }))
+                        }
+                        currentUserId={selectedAssignment?.menteeId}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="reassignReason">Reason for Reassignment *</Label>
+                      <Textarea
+                        id="reassignReason"
+                        value={reassignForm.reason}
+                        onChange={e =>
+                          setReassignForm(prev => ({ ...prev, reason: e.target.value }))
+                        }
+                        placeholder="Please explain why this reassignment is necessary..."
+                        rows={3}
+                        className="starboard-input"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsReassignDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleReassignAssignment} className="starboard-button">
+                    Reassign
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
         </Tabs>
       </div>

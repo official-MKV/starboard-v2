@@ -87,7 +87,7 @@ model User {
   lastActiveAt DateTime?
   isOnboardingCompleted Boolean @default(false)
   sentTyping     TypingIndicator[] @relation("TypingSender")
-receivedTyping TypingIndicator[] @relation("TypingReceiver")
+  receivedTyping TypingIndicator[] @relation("TypingReceiver")
   onboardingCompletedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -115,7 +115,6 @@ receivedTyping TypingIndicator[] @relation("TypingReceiver")
   onboardingProgress   OnboardingCompletion[]
   createdTemplates     EmailTemplate[]
 
-  // eventSpeaking       EventSpeaker[]    @relation("EventSpeaker")
   eventReminders      EventReminder[]
   rescheduledEvents   EventReschedule[]
   availability        UserAvailability[]
@@ -128,8 +127,19 @@ receivedTyping TypingIndicator[] @relation("TypingReceiver")
   participatedVideoCalls VideoCall[]  @relation("VideoCallParticipant")
 
 
+  mentorAssignments     MentorshipAssignment[] @relation("MentorAssignments")
+  menteeAssignments     MentorshipAssignment[] @relation("MenteeAssignments")
+  createdAssignments    MentorshipAssignment[] @relation("MentorshipAssignmentCreator")
+  createdHistory        MentorshipHistory[] @relation("MentorshipHistoryCreator")
+
+
+  organizedMeetings     Meeting[] @relation("MeetingOrganizer")
+  createdMeetings       Meeting[] @relation("MeetingCreator")
+
   @@map("users")
 }
+
+
 
 model UserUnavailability {
   id        String   @id @default(cuid())
@@ -173,12 +183,31 @@ model Workspace {
   onboardingFlows   OnboardingFlow[]
   emailTemplates    EmailTemplate[]
   videoCalls VideoCall[]
+   mentorshipAssignments MentorshipAssignment[]
   onboardingCompletions OnboardingCompletion[]
     activities Activity[]
+    meetings          Meeting[]
 
   @@map("workspaces")
 }
+enum MeetingType {
+  MENTORSHIP
+  ONE_ON_ONE
+  TEAM_MEETING
+  CLIENT_CALL
+  INTERVIEW
+  TRAINING
+  OTHER
+}
 
+enum MeetingStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  RESCHEDULED
+}
 model WorkspaceMember {
   id              String   @id @default(cuid())
   workspaceId     String
@@ -261,7 +290,55 @@ enum EmailTemplateType {
   ACCEPTANCE
   REJECTION
 }
+model Meeting {
+  id            String   @id @default(cuid())
+  workspaceId   String
 
+  // Meeting details
+  title         String
+  description   String?
+  startTime     DateTime
+  endTime       DateTime
+  location      String?
+  virtualLink   String?
+
+  // Meeting type and status
+  type          MeetingType @default(MENTORSHIP)
+  status        MeetingStatus @default(SCHEDULED)
+
+  // Participants
+  organizerId   String
+  participants  Json     @default("[]") // Array of user IDs
+
+  // Meeting metadata
+  agenda        String?
+  notes         String?
+  actionItems   Json     @default("[]")
+  attachments   Json     @default("[]")
+
+  // Recording and follow-up
+  recordingUrl  String?
+  followUpNotes String?
+  wasProductive Boolean?
+  rating        Int?     // 1-5 rating
+
+  // Mentorship specific
+  assignmentId  String?  // Link to mentorship assignment
+  meetingNumber Int?     // Which meeting in the sequence (1st, 2nd, etc.)
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String
+
+  // Relations
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organizer     User     @relation("MeetingOrganizer", fields: [organizerId], references: [id])
+  creator       User     @relation("MeetingCreator", fields: [createdBy], references: [id])
+  assignment    MentorshipAssignment? @relation("MentorshipMeetings", fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@map("meetings")
+}
 
 // ===== ROLE & PERMISSION MODELS =====
 
@@ -280,6 +357,8 @@ model Role {
   requiredProfileFields Json @default("[]")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  canMentor     Boolean  @default(false)
+  canBeMentee   Boolean  @default(false)
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   members       WorkspaceMember[]
@@ -1023,4 +1102,81 @@ enum ResponseStatus {
   DECLINED
   TENTATIVE
   NO_RESPONSE
+}
+
+// Mentorship Assignment model - THE CORE MODEL
+model MentorshipAssignment {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  mentorId          String
+  menteeId          String
+  status            MentorshipStatus @default(ACTIVE)
+
+  // Assignment details
+  assignedAt        DateTime @default(now())
+
+  // Meeting tracking
+  totalMeetings     Int      @default(0)
+  lastMeetingAt     DateTime?
+  nextMeetingDue    DateTime? // For tracking monthly meeting requirements
+
+  // Optional notes
+  notes             String?
+
+  // Relationships
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  mentor            User     @relation("MentorAssignments", fields: [mentorId], references: [id], onDelete: Cascade)
+  mentee            User     @relation("MenteeAssignments", fields: [menteeId], references: [id], onDelete: Cascade)
+
+  // History and tracking
+  history           MentorshipHistory[]
+  meetings          Meeting[] @relation("MentorshipMeetings")
+
+  // Metadata
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdById       String
+  createdBy         User     @relation("MentorshipAssignmentCreator", fields: [createdById], references: [id])
+
+  // Ensure unique active assignments per workspace
+  @@unique([workspaceId, mentorId, menteeId, status])
+  @@map("mentorship_assignments")
+}
+
+// Mentorship History model for tracking changes
+model MentorshipHistory {
+  id           String   @id @default(cuid())
+  assignmentId String
+  action       MentorshipAction
+
+  // Previous values (JSON for flexibility)
+  previousData Json?
+  newData      Json?
+  reason       String?
+
+  // Relationships
+  assignment   MentorshipAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  // Metadata
+  createdAt    DateTime @default(now())
+  createdById  String
+  createdBy    User     @relation("MentorshipHistoryCreator", fields: [createdById], references: [id])
+
+  @@map("mentorship_history")
+}
+
+// Enums
+enum MentorshipStatus {
+  ACTIVE
+  PAUSED
+  TERMINATED
+}
+
+enum MentorshipAction {
+  ASSIGNED
+  REASSIGNED
+  STATUS_CHANGED
+  NOTES_UPDATED
+  MEETING_COMPLETED
+  TERMINATED
 }
