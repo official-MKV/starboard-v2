@@ -237,6 +237,8 @@ The {{workspace_name}} Team`
             requiresOnboarding: updates.requiresOnboarding,
             onboardingForm: updates.onboardingForm,
             isDefault: updates.isDefault,
+            canMentor: updates.canMentor, // ✅ Added missing field
+            canBeMentee: updates.canBeMentee, // ✅ Added missing field
           },
           include: {
             _count: {
@@ -261,6 +263,10 @@ The {{workspace_name}} Team`
         roleId,
         roleName: role.name,
         updatedFields: Object.keys(updates),
+        mentorshipCapabilities: {
+          canMentor: role.canMentor,
+          canBeMentee: role.canBeMentee,
+        },
       })
 
       return role
@@ -271,7 +277,6 @@ The {{workspace_name}} Team`
       throw handleDatabaseError(error)
     }
   }
-
   /**
    * Delete role and associated email templates (only if no members)
    * @param {string} roleId - Role ID

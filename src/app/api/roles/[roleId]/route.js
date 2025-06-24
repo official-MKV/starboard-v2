@@ -127,9 +127,10 @@ export async function PUT(request, { params }) {
       requiresOnboarding,
       onboardingForm,
       emailTemplate,
+      canMentor,
+      canBeMentee,
     } = body
 
-    // Validate required fields
     if (!name?.trim()) {
       return NextResponse.json({ error: { message: 'Role name is required' } }, { status: 400 })
     }
@@ -141,7 +142,6 @@ export async function PUT(request, { params }) {
       )
     }
 
-    // Prepare update data
     const updates = {
       name: name.trim(),
       description: description?.trim() || null,
@@ -153,6 +153,10 @@ export async function PUT(request, { params }) {
           : existingRole.requiresOnboarding,
       onboardingForm: requiresOnboarding ? onboardingForm : null,
       emailTemplate: emailTemplate || null,
+
+      canMentor: canMentor !== undefined ? Boolean(canMentor) : existingRole.canMentor || false,
+      canBeMentee:
+        canBeMentee !== undefined ? Boolean(canBeMentee) : existingRole.canBeMentee || false,
     }
 
     // Update the role
@@ -164,6 +168,10 @@ export async function PUT(request, { params }) {
       workspaceId: workspaceContext.workspaceId,
       userId: session.user.id,
       updatedFields: Object.keys(updates),
+      mentorshipCapabilities: {
+        canMentor: updates.canMentor,
+        canBeMentee: updates.canBeMentee,
+      },
     })
 
     return NextResponse.json({
