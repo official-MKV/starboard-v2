@@ -1,4 +1,4 @@
-import UserDetailPage from '@/Components/users/UserDetailPage'
+import UserDetailPage from '@/components/users/userDetailPage'
 
 export default function page() {
   return (
