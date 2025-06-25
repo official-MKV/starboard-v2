@@ -12,18 +12,19 @@ export async function GET(request, { params }) {
     }
 
     const { userId } = params
-
     const isOwnProfile = session.user.id === userId
 
-    if (!isOwnProfile) {
-      const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
-      if (!workspaceContext) {
-        return NextResponse.json(
-          { error: { message: 'Workspace context required' } },
-          { status: 400 }
-        )
-      }
+    // Always get workspace context to filter workspace membership
+    const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
+    if (!workspaceContext) {
+      return NextResponse.json(
+        { error: { message: 'Workspace context required' } },
+        { status: 400 }
+      )
+    }
 
+    // Check permissions for viewing other users
+    if (!isOwnProfile) {
       const hasPermission = await WorkspaceContext.hasAnyPermission(
         session.user.id,
         workspaceContext.workspaceId,
@@ -63,45 +64,114 @@ export async function GET(request, { params }) {
         createdAt: true,
         updatedAt: true,
         profileData: true,
-        // Include workspace membership if checking permissions
-        ...(isOwnProfile
-          ? {}
-          : {
-              workspaceMembers: {
-                select: {
-                  id: true,
-                  isActive: true,
-                  joinedAt: true,
-                  role: {
-                    select: {
-                      id: true,
-                      name: true,
-                      color: true,
-                    },
-                  },
-                },
+        // Always include workspace membership details filtered by current workspace
+        workspaceMembers: {
+          where: {
+            workspaceId: workspaceContext.workspaceId,
+            isActive: true,
+          },
+          select: {
+            id: true,
+            isActive: true,
+            joinedAt: true,
+            invitedBy: true,
+            invitedAt: true,
+            onboardingRequired: true,
+            onboardingStartedAt: true,
+            onboardingCompletedAt: true,
+            settings: true,
+            updatedAt: true,
+            role: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                color: true,
+                isSystem: true,
+                isDefault: true,
+                permissions: true,
+                requiresOnboarding: true,
+                canMentor: true,
+                canBeMentee: true,
+                requiredProfileFields: true,
+                createdAt: true,
+                updatedAt: true,
               },
-            }),
+            },
+            workspace: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                description: true,
+                logo: true,
+                website: true,
+                isActive: true,
+                settings: true,
+              },
+            },
+          },
+        },
       },
     })
-    console.log(user)
 
     if (!user) {
       return NextResponse.json({ error: { message: 'User not found' } }, { status: 404 })
     }
 
+    // Check if user is a member of the current workspace
+    const currentWorkspaceMembership = user.workspaceMembers?.[0] || null
+
+    if (!currentWorkspaceMembership && !isOwnProfile) {
+      return NextResponse.json(
+        { error: { message: 'User not found in current workspace' } },
+        { status: 404 }
+      )
+    }
+
+    // Transform the response to include workspace-specific details at the top level
+    const responseData = {
+      ...user,
+      // Add current workspace membership details for easier access
+      currentWorkspace: currentWorkspaceMembership
+        ? {
+            membershipId: currentWorkspaceMembership.id,
+            isActive: currentWorkspaceMembership.isActive,
+            joinedAt: currentWorkspaceMembership.joinedAt,
+            invitedBy: currentWorkspaceMembership.invitedBy,
+            invitedAt: currentWorkspaceMembership.invitedAt,
+            onboardingRequired: currentWorkspaceMembership.onboardingRequired,
+            onboardingStartedAt: currentWorkspaceMembership.onboardingStartedAt,
+            onboardingCompletedAt: currentWorkspaceMembership.onboardingCompletedAt,
+            settings: currentWorkspaceMembership.settings,
+            membershipUpdatedAt: currentWorkspaceMembership.updatedAt,
+            role: currentWorkspaceMembership.role,
+            workspace: currentWorkspaceMembership.workspace,
+          }
+        : null,
+      // Keep the raw workspaceMembers array for compatibility
+      workspaceMembers: user.workspaceMembers,
+    }
+
     logger.info('User profile fetched', {
       userId: user.id,
       requestedBy: session.user.id,
+      workspaceId: workspaceContext.workspaceId,
       isOwnProfile,
+      hasWorkspaceMembership: !!currentWorkspaceMembership,
+      roleName: currentWorkspaceMembership?.role?.name || null,
     })
 
     return NextResponse.json({
       success: true,
-      data: { user },
+      data: { user: responseData },
     })
   } catch (error) {
-    logger.error('Error fetching user profile', { error: error.message, userId: params.userId })
+    logger.error('Error fetching user profile', {
+      error: error.message,
+      userId: params.userId,
+      stack: error.stack,
+    })
     return NextResponse.json(
       { error: { message: 'Failed to fetch user profile' } },
       { status: 500 }

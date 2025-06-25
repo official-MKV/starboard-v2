@@ -93,14 +93,12 @@ export default function UserDetailPage() {
       const response = await fetch(`/api/users/${userId}`)
       if (response.ok) {
         const data = await response.json()
-
         setUser(data.data.user)
       } else {
         toast.error('Failed to load user details')
         router.push('/users')
       }
     } catch (error) {
-      console.error('Error fetching user details:', error)
       toast.error('Failed to load user details')
     } finally {
       setIsLoading(false)
@@ -115,7 +113,7 @@ export default function UserDetailPage() {
         setMentorshipData(data.data)
       }
     } catch (error) {
-      console.error('Error fetching mentorship data:', error)
+      toast.error('Failed to load mentorship data')
     }
   }
 
@@ -145,7 +143,6 @@ export default function UserDetailPage() {
         toast.error(error.error?.message || 'Failed to assign mentor')
       }
     } catch (error) {
-      console.error('Error assigning mentor:', error)
       toast.error('An unexpected error occurred')
     }
   }
@@ -184,7 +181,6 @@ export default function UserDetailPage() {
         toast.error(error.error?.message || 'Failed to reassign mentor')
       }
     } catch (error) {
-      console.error('Error reassigning mentor:', error)
       toast.error('An unexpected error occurred')
     }
   }
@@ -209,7 +205,6 @@ export default function UserDetailPage() {
         toast.error(error.error?.message || 'Failed to terminate mentorship')
       }
     } catch (error) {
-      console.error('Error terminating mentorship:', error)
       toast.error('An unexpected error occurred')
     }
   }
@@ -255,10 +250,12 @@ export default function UserDetailPage() {
     )
   }
 
+  const currentRole = user.currentWorkspace?.role
+  const currentWorkspace = user.currentWorkspace
+
   return (
     <div className="min-h-screen bg-snow-100">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center space-x-4">
             <Button
@@ -292,7 +289,6 @@ export default function UserDetailPage() {
           </div>
         </div>
 
-        {/* User Info Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="starboard-card">
             <CardContent className="p-6">
@@ -300,16 +296,17 @@ export default function UserDetailPage() {
                 <div>
                   <p className="text-sm font-medium text-slate-gray-600">Role</p>
                   <div className="flex items-center space-x-2 mt-1">
-                    {user.role && (
+                    {currentRole && (
                       <>
                         <div
                           className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: user.role.color }}
+                          style={{ backgroundColor: currentRole.color }}
                         />
-                        <span className="font-medium">{user.role.name}</span>
-                        {user.role.isDefault && <Crown className="h-3 w-3 text-yellow-500" />}
+                        <span className="font-medium">{currentRole.name}</span>
+                        {currentRole.isDefault && <Crown className="h-3 w-3 text-yellow-500" />}
                       </>
                     )}
+                    {!currentRole && <span className="text-slate-gray-400">No role assigned</span>}
                   </div>
                 </div>
                 <User className="h-8 w-8 text-blue-500" />
@@ -341,7 +338,9 @@ export default function UserDetailPage() {
                 <div>
                   <p className="text-sm font-medium text-slate-gray-600">Joined</p>
                   <p className="text-sm font-medium">
-                    {user.joinedAt ? new Date(user.joinedAt).toLocaleDateString() : 'N/A'}
+                    {currentWorkspace?.joinedAt
+                      ? new Date(currentWorkspace.joinedAt).toLocaleDateString()
+                      : 'N/A'}
                   </p>
                 </div>
                 <Calendar className="h-8 w-8 text-purple-500" />
@@ -351,7 +350,6 @@ export default function UserDetailPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* User Information */}
           <Card className="starboard-card">
             <CardHeader>
               <CardTitle>User Information</CardTitle>
@@ -383,11 +381,18 @@ export default function UserDetailPage() {
                   <Label className="text-sm font-medium text-gray-700">Company</Label>
                   <p className="text-sm">{user.company || 'N/A'}</p>
                 </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Location</Label>
+                  <p className="text-sm">{user.location || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Bio</Label>
+                  <p className="text-sm">{user.bio || 'N/A'}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Mentors Section - Only show mentors assigned TO this user */}
           <Card className="starboard-card">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -395,7 +400,7 @@ export default function UserDetailPage() {
                   <CardTitle>Mentors</CardTitle>
                   <CardDescription>Mentors assigned to {user.firstName}</CardDescription>
                 </div>
-                {user.role?.canBeMentee && !mentorshipData.asMentee && (
+                {currentRole?.canBeMentee && !mentorshipData.asMentee && (
                   <Button
                     onClick={() => setIsAssignMentorDialogOpen(true)}
                     className="starboard-button"
@@ -407,7 +412,7 @@ export default function UserDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {!user.role?.canBeMentee ? (
+              {!currentRole?.canBeMentee ? (
                 <div className="text-center py-8 text-slate-gray-500">
                   <Info className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                   <p className="font-medium">Cannot be mentored</p>
@@ -496,7 +501,6 @@ export default function UserDetailPage() {
           </Card>
         </div>
 
-        {/* Assign Mentor Dialog */}
         <Dialog open={isAssignMentorDialogOpen} onOpenChange={setIsAssignMentorDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
@@ -534,7 +538,6 @@ export default function UserDetailPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Reassign Mentor Dialog */}
         <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
