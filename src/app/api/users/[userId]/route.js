@@ -1,14 +1,9 @@
-// app/api/users/[userId]/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
 import { prisma } from '@/lib/database'
 import { logger } from '@/lib/logger'
 
-/**
- * GET /api/users/[userId]
- * Get a specific user's profile
- */
 export async function GET(request, { params }) {
   try {
     const session = await auth()
@@ -18,11 +13,9 @@ export async function GET(request, { params }) {
 
     const { userId } = params
 
-    // Users can view their own profile, or need permissions to view others
     const isOwnProfile = session.user.id === userId
 
     if (!isOwnProfile) {
-      // Get workspace context for permission check
       const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
       if (!workspaceContext) {
         return NextResponse.json(
@@ -45,7 +38,6 @@ export async function GET(request, { params }) {
       }
     }
 
-    // Fetch user data
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -92,6 +84,7 @@ export async function GET(request, { params }) {
             }),
       },
     })
+    console.log(user)
 
     if (!user) {
       return NextResponse.json({ error: { message: 'User not found' } }, { status: 404 })

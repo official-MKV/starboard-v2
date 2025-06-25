@@ -6,14 +6,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import MessageComponent from './message-component'
 import { VideoCallInterface } from './video-call-interface'
 
-// Main Chat Interface Component
 export default function ChatInterface() {
   const [workspaceMembers, setWorkspaceMembers] = useState([])
   const [activeConversation, setActiveConversation] = useState(null)
   const [messages, setMessages] = useState([])
-  const [conversationMessages, setConversationMessages] = useState({}) // Store messages per conversation
-  const [conversations, setConversations] = useState([]) // List of active conversations
-  const [showMemberModal, setShowMemberModal] = useState(false) // For selecting users to chat with
+  const [conversationMessages, setConversationMessages] = useState({})
+  const [conversations, setConversations] = useState([])
+  const [showMemberModal, setShowMemberModal] = useState(false)
   const [showVideoCall, setShowVideoCall] = useState(false)
   const [currentVideoCall, setCurrentVideoCall] = useState(null)
   const [newMessage, setNewMessage] = useState('')
@@ -25,10 +24,72 @@ export default function ChatInterface() {
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [memberSearchQuery, setMemberSearchQuery] = useState('')
+  const reconnectTimeoutRef = useRef(null)
+
+  const connectToWebSocket = useCallback(async () => {
+    try {
+      const tokenResponse = await fetch('/api/auth/ws-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const tokenData = await tokenResponse.json()
+
+      if (tokenData.token) {
+        const WEBSOCKET_URL =
+          process.env.NEXT_PUBLIC_WEBSOCKET_URL ||
+          (process.env.NODE_ENV === 'production'
+            ? 'wss://your-railway-app.up.railway.app'
+            : 'ws://localhost:8080')
+
+        const wsUrl = `${WEBSOCKET_URL}/api/chat/ws?token=${tokenData.token}`
+        const websocket = new WebSocket(wsUrl)
+
+        websocket.onopen = () => {
+          setWs(websocket)
+          setConnectionStatus('connected')
+          setReconnectAttempts(0)
+          setError(null)
+        }
+
+        websocket.onmessage = event => {
+          try {
+            const message = JSON.parse(event.data)
+            handleWebSocketMessage(message)
+          } catch (error) {
+            // Silent error handling
+          }
+        }
+
+        websocket.onclose = event => {
+          setWs(null)
+          setConnectionStatus('disconnected')
+
+          if (reconnectAttempts < 5) {
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000)
+
+            reconnectTimeoutRef.current = setTimeout(() => {
+              setReconnectAttempts(prev => prev + 1)
+              connectToWebSocket()
+            }, delay)
+          } else {
+            setError('Lost connection to chat server. Please refresh the page.')
+          }
+        }
+
+        websocket.onerror = error => {
+          setConnectionStatus('error')
+        }
+      }
+    } catch (error) {
+      setConnectionStatus('error')
+      setError('Failed to connect to chat server')
+    }
+  }, [reconnectAttempts])
 
   useEffect(() => {
     const initializeChat = async () => {
@@ -46,46 +107,7 @@ export default function ChatInterface() {
 
         setUser(session.user)
         await loadExistingConversations(session.user.id)
-
-        try {
-          const tokenResponse = await fetch('/api/auth/ws-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          })
-          const tokenData = await tokenResponse.json()
-
-          if (tokenData.token) {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-            const wsUrl = `${wsProtocol}//${window.location.host}/api/chat/ws?token=${tokenData.token}`
-
-            const websocket = new WebSocket(wsUrl)
-
-            websocket.onopen = () => {
-              setWs(websocket)
-              setConnectionStatus('connected')
-            }
-
-            websocket.onmessage = event => {
-              try {
-                const message = JSON.parse(event.data)
-                handleWebSocketMessage(message)
-              } catch (error) {
-                // Silent error handling
-              }
-            }
-
-            websocket.onclose = event => {
-              setWs(null)
-              setConnectionStatus('disconnected')
-            }
-
-            websocket.onerror = error => {
-              setConnectionStatus('error')
-            }
-          }
-        } catch (error) {
-          setConnectionStatus('error')
-        }
+        await connectToWebSocket()
       } catch (error) {
         setError('Failed to initialize chat. Please refresh the page.')
       } finally {
@@ -94,9 +116,17 @@ export default function ChatInterface() {
     }
 
     initializeChat()
+
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+      if (ws) {
+        ws.close()
+      }
+    }
   }, [])
 
-  // Listen for video call events from message components
   useEffect(() => {
     const handleOpenVideoCall = event => {
       const { meetingData } = event.detail
@@ -111,20 +141,16 @@ export default function ChatInterface() {
   const handleWebSocketMessage = useCallback(
     message => {
       const { type, data } = message
-      console.log(`Handling WebSocket message type: ${type}`, data)
 
       switch (type) {
         case 'connected':
-          console.log('WebSocket connection confirmed')
           if (data.onlineUsers) {
             setOnlineUsers(new Set(data.onlineUsers))
           }
           break
 
         case 'new_message':
-          console.log('New message received:', data)
           if (data.senderId === user?.id || data.receiverId === user?.id) {
-            // Update current messages if this conversation is active
             if (
               (data.senderId === activeConversation?.id && data.receiverId === user?.id) ||
               (data.senderId === user?.id && data.receiverId === activeConversation?.id)
@@ -132,7 +158,6 @@ export default function ChatInterface() {
               setMessages(prev => {
                 const exists = prev.some(msg => msg.id === data.id)
                 if (!exists) {
-                  console.log('Adding message to current conversation')
                   const updated = [...prev, data]
                   setTimeout(scrollToBottom, 100)
                   return updated
@@ -141,7 +166,6 @@ export default function ChatInterface() {
               })
             }
 
-            // Update conversation-specific storage
             const otherUserId = data.senderId === user?.id ? data.receiverId : data.senderId
             const conversationKey = [user.id, otherUserId].sort().join('-')
             setConversationMessages(prev => {
@@ -156,7 +180,6 @@ export default function ChatInterface() {
               return prev
             })
 
-            // Update conversations list with last message
             setConversations(prev => {
               return prev.map(conv => {
                 if (conv.id === otherUserId) {
@@ -201,8 +224,11 @@ export default function ChatInterface() {
           })
           break
 
-        default:
-          console.log('Unknown message type:', type)
+        case 'heartbeat':
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'heartbeat_ack' }))
+          }
+          break
       }
     },
     [activeConversation, user, ws]
@@ -223,13 +249,10 @@ export default function ChatInterface() {
 
   const loadMessages = async otherUserId => {
     try {
-      console.log('Fetching messages for user:', otherUserId)
       const response = await fetch(`/api/chat/messages?receiverId=${otherUserId}&limit=100`)
       const data = await response.json()
-      console.log(data)
 
       if (response.ok) {
-        console.log('Messages loaded:', data.messages?.length)
         const newMessages = data.messages || []
         setMessages(newMessages)
 
@@ -241,11 +264,9 @@ export default function ChatInterface() {
 
         setTimeout(scrollToBottom, 100)
       } else {
-        console.error('Error loading messages:', data.error)
         setError('Failed to load messages')
       }
     } catch (error) {
-      console.error('Error loading messages:', error)
       setError('Failed to load messages')
     }
   }
@@ -265,7 +286,7 @@ export default function ChatInterface() {
 
     try {
       const payload = {
-        receiverId: activeConversation.id, // ✅ Now correctly uses User.id
+        receiverId: activeConversation.id,
         content: messageContent,
         type: 'TEXT',
       }
@@ -279,11 +300,23 @@ export default function ChatInterface() {
       const data = await response.json()
 
       if (!response.ok) {
-        console.error('❌ Error sending message:', data.error)
         setError(`Failed to send message: ${data.error}`)
         setNewMessage(messageContent)
       } else {
-        console.log('✅ Message sent successfully:', data.message)
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              type: 'broadcast_message',
+              payload: {
+                messageId: data.message.id,
+                receiverId: activeConversation.id,
+                senderId: user.id,
+                message: data.message,
+              },
+            })
+          )
+        }
+
         setMessages(prev => {
           const exists = prev.some(msg => msg.id === data.message.id)
           if (!exists) {
@@ -292,7 +325,6 @@ export default function ChatInterface() {
           return prev
         })
 
-        // Update conversations list with last message
         setConversations(prev => {
           return prev.map(conv => {
             if (conv.id === activeConversation.id) {
@@ -312,7 +344,6 @@ export default function ChatInterface() {
         setTimeout(scrollToBottom, 100)
       }
     } catch (error) {
-      console.error('❌ Network error sending message:', error)
       setError('Network error. Please check your connection.')
       setNewMessage(messageContent)
     }
@@ -365,19 +396,17 @@ export default function ChatInterface() {
 
       const uploadData = await uploadResponse.json()
 
-      // Upload file to S3
       await fetch(uploadData.uploadUrl, {
         method: 'PUT',
         body: file,
         headers: { 'Content-Type': file.type },
       })
 
-      // Send message with file
-      await fetch('/api/chat/messages', {
+      const response = await fetch('/api/chat/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          receiverId: activeConversation.id, // ✅ Now correctly uses User.id
+          receiverId: activeConversation.id,
           content: `Shared ${file.name}`,
           type: file.type.startsWith('image/') ? 'IMAGE' : 'FILE',
           fileUrl: uploadData.fileUrl,
@@ -387,8 +416,23 @@ export default function ChatInterface() {
           thumbnailUrl: uploadData.thumbnailUrl,
         }),
       })
+
+      const data = await response.json()
+
+      if (response.ok && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: 'broadcast_message',
+            payload: {
+              messageId: data.message.id,
+              receiverId: activeConversation.id,
+              senderId: user.id,
+              message: data.message,
+            },
+          })
+        )
+      }
     } catch (error) {
-      console.error('Error uploading file:', error)
       setError('Failed to upload file')
     }
   }
@@ -397,37 +441,42 @@ export default function ChatInterface() {
     if (!activeConversation) return
 
     try {
-      console.log('🎥 Creating video call...')
       const response = await fetch('/api/chat/video/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          participantId: activeConversation.id, // ✅ Now correctly uses User.id
+          participantId: activeConversation.id,
         }),
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        console.log('✅ Video call created:', data.meeting)
-
-        // Set video call data and show interface
         setCurrentVideoCall(data.meeting)
         setShowVideoCall(true)
 
-        // The message is already sent by the API, no need to send another one
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              type: 'broadcast_message',
+              payload: {
+                messageId: data.message?.id,
+                receiverId: activeConversation.id,
+                senderId: user.id,
+                message: data.message,
+              },
+            })
+          )
+        }
       } else {
-        console.error('❌ Error creating video call:', data.error)
         setError('Failed to create video call')
       }
     } catch (error) {
-      console.error('❌ Error creating video call:', error)
       setError('Failed to create video call')
     }
   }
 
   const handleCallEnd = () => {
-    // Refresh messages to update call status
     if (activeConversation) {
       loadMessages(activeConversation.id)
     }
@@ -435,16 +484,12 @@ export default function ChatInterface() {
 
   const loadExistingConversations = async userId => {
     try {
-      console.log('📞 Fetching conversations from API...')
       const response = await fetch('/api/chat/conversations')
       const data = await response.json()
 
       if (response.ok && data.conversations) {
-        console.log(`✅ Found ${data.conversations.length} existing conversations`)
-
-        // ✅ Transform conversations to ensure they have proper User structure
         const transformedConversations = data.conversations.map(conv => ({
-          id: conv.id, // Should already be User.id from your API
+          id: conv.id,
           firstName: conv.firstName,
           lastName: conv.lastName,
           avatar: conv.avatar,
@@ -467,15 +512,12 @@ export default function ChatInterface() {
               conversationMessagesData[conversationKey] = messagesData.messages
             }
           } catch (error) {
-            console.log(`⚠️ Could not load messages for ${conv.firstName} ${conv.lastName}`)
+            // Silent error
           }
         }
         setConversationMessages(conversationMessagesData)
-      } else {
-        console.log('📭 No existing conversations found')
       }
     } catch (error) {
-      console.error('❌ Error loading existing conversations:', error)
       setError('Failed to load conversations')
     }
   }
@@ -486,45 +528,34 @@ export default function ChatInterface() {
     }
 
     try {
-      console.log('👥 Loading workspace members from API...')
       const membersResponse = await fetch('/api/workspaces/members')
       const membersData = await membersResponse.json()
 
       if (membersResponse.ok && membersData.members) {
-        // ✅ Transform members to flatten user data to top level for easier access
         const transformedMembers = membersData.members.map(member => ({
-          // Spread user properties to top level for easier access
-          id: member.user.id, // ✅ User.id at top level
+          id: member.user.id,
           firstName: member.user.firstName,
           lastName: member.user.lastName,
           avatar: member.user.avatar,
           jobTitle: member.user.jobTitle,
           email: member.user.email,
-          // Keep original structure for reference
           workspaceMemberId: member.id,
           role: member.role,
-          user: member.user, // Keep original user object
+          user: member.user,
         }))
 
         setWorkspaceMembers(transformedMembers)
-        console.log(`✅ Loaded ${transformedMembers.length} workspace members`)
       } else {
-        console.error('❌ Failed to load workspace members:', membersData)
         setError('Failed to load workspace members')
       }
     } catch (error) {
-      console.error('❌ Error loading workspace members:', error)
       setError('Failed to load workspace members')
     }
   }
 
-  // ✅ Fixed startConversation function
   const startConversation = async memberUser => {
-    console.log('Starting conversation with:', memberUser.firstName, memberUser.lastName)
-
-    // ✅ Create conversation object using User data (already transformed)
     const newConversation = {
-      id: memberUser.id, // ✅ This is now User.id
+      id: memberUser.id,
       firstName: memberUser.firstName,
       lastName: memberUser.lastName,
       avatar: memberUser.avatar,
@@ -535,18 +566,18 @@ export default function ChatInterface() {
     }
 
     setConversations(prev => {
-      const exists = prev.some(conv => conv.id === memberUser.id) // ✅ Check User.id
+      const exists = prev.some(conv => conv.id === memberUser.id)
       if (!exists) {
         return [...prev, newConversation]
       }
       return prev
     })
 
-    setActiveConversation(newConversation) // ✅ Set User object as active conversation
+    setActiveConversation(newConversation)
     setShowMemberModal(false)
     setMemberSearchQuery('')
 
-    await loadMessages(memberUser.id) // ✅ Use User.id
+    await loadMessages(memberUser.id)
   }
 
   const handleStartConversation = async () => {
@@ -554,13 +585,12 @@ export default function ChatInterface() {
       await loadWorkspaceMembers()
       setShowMemberModal(true)
     } catch (error) {
-      console.error('❌ Error in handleStartConversation:', error)
+      // Silent error
     }
   }
 
   const isOnline = userId => onlineUsers.has(userId)
 
-  // ✅ Filter workspace members for modal
   const filteredWorkspaceMembers = workspaceMembers.filter(member => {
     if (!memberSearchQuery) return true
     const query = memberSearchQuery.toLowerCase()
@@ -586,13 +616,21 @@ export default function ChatInterface() {
     return (
       <div className="flex h-screen bg-gray-100 items-center justify-center">
         <div className="text-center">
-          <div className="text-red-500 mb-4">❌ {error}</div>
+          <div className="text-red-500 mb-4">{error}</div>
           <button
             onClick={() => window.location.reload()}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 mr-2"
           >
             Refresh Page
           </button>
+          {connectionStatus === 'disconnected' && (
+            <button
+              onClick={connectToWebSocket}
+              className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+            >
+              Reconnect
+            </button>
+          )}
         </div>
       </div>
     )
@@ -600,15 +638,22 @@ export default function ChatInterface() {
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Sidebar - Conversations */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
             <div className="flex items-center space-x-2">
               <div
-                className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-gray-400'}`}
+                className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'connected'
+                    ? 'bg-green-500'
+                    : connectionStatus === 'error'
+                      ? 'bg-red-500'
+                      : 'bg-gray-400'
+                }`}
+                title={`Connection: ${connectionStatus}`}
               ></div>
+              <span className="text-xs text-gray-500">{connectionStatus}</span>
             </div>
           </div>
 
@@ -706,11 +751,9 @@ export default function ChatInterface() {
         </div>
       </div>
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {activeConversation ? (
           <>
-            {/* Chat Header */}
             <div className="bg-white border-b border-gray-200 p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -762,7 +805,6 @@ export default function ChatInterface() {
               </div>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
@@ -781,7 +823,6 @@ export default function ChatInterface() {
                 ))
               )}
 
-              {/* Typing Indicators */}
               {typingUsers.length > 0 && (
                 <div className="flex items-center space-x-2">
                   <img
@@ -807,7 +848,6 @@ export default function ChatInterface() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Message Input */}
             <div className="bg-white border-t border-gray-200 p-4">
               <div className="flex items-center space-x-3">
                 <Button
@@ -832,10 +872,14 @@ export default function ChatInterface() {
                     placeholder={`Message ${activeConversation.firstName}...`}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows="1"
+                    disabled={connectionStatus !== 'connected'}
                   />
                 </div>
 
-                <Button onClick={sendMessage} disabled={!newMessage.trim()}>
+                <Button
+                  onClick={sendMessage}
+                  disabled={!newMessage.trim() || connectionStatus !== 'connected'}
+                >
                   <Send className="w-5 h-5" />
                 </Button>
               </div>
@@ -862,12 +906,14 @@ export default function ChatInterface() {
               <div className="text-sm text-gray-400">
                 💬 Send messages • 📎 Share files • 🎥 Video calls
               </div>
+              {connectionStatus !== 'connected' && (
+                <p className="text-red-500 text-sm mt-2">⚠️ Not connected to chat server</p>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Member Selection Modal */}
       <Dialog open={showMemberModal} onOpenChange={setShowMemberModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -875,7 +921,6 @@ export default function ChatInterface() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Search Input */}
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <input
@@ -887,7 +932,6 @@ export default function ChatInterface() {
               />
             </div>
 
-            {/* Members List */}
             <div className="max-h-96 overflow-y-auto space-y-2">
               {filteredWorkspaceMembers.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
@@ -895,11 +939,11 @@ export default function ChatInterface() {
                 </div>
               ) : (
                 filteredWorkspaceMembers
-                  .filter(member => member.id !== user?.id) // ✅ Don't show current user
-                  .filter(member => !conversations.some(conv => conv.id === member.id)) // ✅ Don't show existing conversations
+                  .filter(member => member.id !== user?.id)
+                  .filter(member => !conversations.some(conv => conv.id === member.id))
                   .map(member => (
                     <div
-                      key={member.id} // ✅ Use User.id
+                      key={member.id}
                       onClick={() => startConversation(member)}
                       className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200"
                     >
@@ -933,7 +977,6 @@ export default function ChatInterface() {
         </DialogContent>
       </Dialog>
 
-      {/* Video Call Interface */}
       <VideoCallInterface
         isOpen={showVideoCall}
         onClose={() => setShowVideoCall(false)}

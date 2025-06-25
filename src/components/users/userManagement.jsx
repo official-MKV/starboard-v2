@@ -79,12 +79,6 @@ import {
   ArrowUpDown,
   ChevronUp,
   ChevronDown,
-  Info,
-  Link2,
-  UserCheck,
-  UserX,
-  AlertTriangle,
-  ArrowRightLeft,
   Check,
   ChevronsUpDown,
 } from 'lucide-react'
@@ -391,14 +385,6 @@ export default function UsersManagement() {
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
 
-  // Mentorship state
-  const [mentorshipAssignments, setMentorshipAssignments] = useState([])
-  const [mentorshipStatistics, setMentorshipStatistics] = useState(null)
-  const [overdueAssignments, setOverdueAssignments] = useState([])
-  const [isCreateAssignmentDialogOpen, setIsCreateAssignmentDialogOpen] = useState(false)
-  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false)
-  const [selectedAssignment, setSelectedAssignment] = useState(null)
-
   // Statistics
   const [statistics, setStatistics] = useState({
     totalUsers: 0,
@@ -434,6 +420,11 @@ export default function UsersManagement() {
     mentorId: '',
     menteeId: '',
   })
+
+  const [mentorshipAssignments, setMentorshipAssignments] = useState([])
+  const [isCreateAssignmentDialogOpen, setIsCreateAssignmentDialogOpen] = useState(false)
+  const [selectedAssignment, setSelectedAssignment] = useState(null)
+  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false)
 
   // Helper functions
   const getInvitationStatus = invitation => {
@@ -476,7 +467,7 @@ export default function UsersManagement() {
       fetchInvitations()
       fetchEmailTemplates()
       fetchStatistics()
-      fetchMentorshipData()
+      fetchMentorshipAssignments()
     }
   }, [requireLoading])
 
@@ -552,36 +543,6 @@ export default function UsersManagement() {
     }
   }
 
-  const fetchMentorshipData = async () => {
-    try {
-      const [assignmentsRes, statisticsRes] = await Promise.all([
-        fetch(
-          `/api/mentorship/assignments?${new URLSearchParams({
-            ...(mentorshipFilters.status !== 'all' && { status: mentorshipFilters.status }),
-            ...(mentorshipFilters.search && { search: mentorshipFilters.search }),
-            ...(mentorshipFilters.mentorId && { mentorId: mentorshipFilters.mentorId }),
-            ...(mentorshipFilters.menteeId && { menteeId: mentorshipFilters.menteeId }),
-          })}`
-        ),
-        fetch('/api/mentorship/statistics'),
-      ])
-
-      if (assignmentsRes.ok) {
-        const assignmentsData = await assignmentsRes.json()
-        setMentorshipAssignments(assignmentsData.data.assignments)
-      }
-
-      if (statisticsRes.ok) {
-        const statisticsData = await statisticsRes.json()
-        setMentorshipStatistics(statisticsData.data.statistics)
-        setOverdueAssignments(statisticsData.data.overdueAssignments || [])
-      }
-    } catch (error) {
-      console.error('Error fetching mentorship data:', error)
-      toast.error('Failed to load mentorship data')
-    }
-  }
-
   const fetchStatistics = async () => {
     try {
       const [usersRes, invitationsRes, rolesRes, templatesRes] = await Promise.all([
@@ -612,6 +573,20 @@ export default function UsersManagement() {
       })
     } catch (error) {
       console.error('Error fetching statistics:', error)
+    }
+  }
+
+  const fetchMentorshipAssignments = async () => {
+    try {
+      const response = await fetch('/api/mentorship/assignments')
+      if (response.ok) {
+        const data = await response.json()
+        setMentorshipAssignments(data.data.assignments)
+      } else {
+        console.error('Failed to fetch mentorship assignments')
+      }
+    } catch (error) {
+      console.error('Error fetching mentorship assignments:', error)
     }
   }
 
@@ -942,7 +917,6 @@ export default function UsersManagement() {
         toast.success('Pairing created successfully')
         setIsCreateAssignmentDialogOpen(false)
         resetAssignmentForm()
-        fetchMentorshipData()
       } else {
         const error = await response.json()
         toast.error(error.error?.message || 'Failed to create assignment')
@@ -979,7 +953,6 @@ export default function UsersManagement() {
         setIsReassignDialogOpen(false)
         setSelectedAssignment(null)
         resetReassignForm()
-        fetchMentorshipData()
       } else {
         const error = await response.json()
         toast.error(error.error?.message || 'Failed to reassign assignment')
@@ -1008,7 +981,6 @@ export default function UsersManagement() {
 
       if (response.ok) {
         toast.success('Assignment terminated successfully')
-        fetchMentorshipData()
       } else {
         const error = await response.json()
         toast.error(error.error?.message || 'Failed to terminate assignment')
@@ -1120,7 +1092,7 @@ export default function UsersManagement() {
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="starboard-card">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -1158,30 +1130,15 @@ export default function UsersManagement() {
               </div>
             </CardContent>
           </Card>
-
-          <Card className="starboard-card">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-gray-600">Email Templates</p>
-                  <p className="text-2xl font-bold text-charcoal-900">
-                    {statistics.totalTemplates}
-                  </p>
-                </div>
-                <Mail className="h-8 w-8 text-orange-500" />
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="invitations">Invitations</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
             <TabsTrigger value="templates">Email Templates</TabsTrigger>
-            <TabsTrigger value="pairing">Pairing</TabsTrigger>
           </TabsList>
 
           {/* Users Tab */}
@@ -1260,6 +1217,7 @@ export default function UsersManagement() {
                       </TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Needs Pairing</TableHead>
                       <TableHead>
                         <SortableHeader
                           field="joinedAt"
@@ -1350,6 +1308,25 @@ export default function UsersManagement() {
                             </Badge>
                           </TableCell>
                           <TableCell>
+                            {user.role?.canBeMentee && !user.hasActiveMentor ? (
+                              <Badge
+                                variant="outline"
+                                className="bg-orange-50 text-orange-700 border-orange-200"
+                              >
+                                Needs Mentor
+                              </Badge>
+                            ) : user.role?.canBeMentee && user.hasActiveMentor ? (
+                              <Badge
+                                variant="outline"
+                                className="bg-green-50 text-green-700 border-green-200"
+                              >
+                                Paired
+                              </Badge>
+                            ) : (
+                              <span className="text-gray-400">N/A</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             <div className="flex items-center space-x-1">
                               <Calendar className="h-4 w-4 text-slate-gray-400" />
                               <span className="text-sm">
@@ -1368,6 +1345,12 @@ export default function UsersManagement() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                  onClick={() => (window.location.href = `/users/${user.id}`)}
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View Details
+                                </DropdownMenuItem>
                                 <DropdownMenuItem>
                                   <Edit className="mr-2 h-4 w-4" />
                                   Edit User
@@ -1834,439 +1817,6 @@ The {{workspace_name}} Team`}
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Mentorships Tab */}
-          <TabsContent value="pairing" className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-charcoal-900">Pairing Management</h2>
-                <p className="text-slate-gray-600 mt-1">
-                  Manage mentor-mentee pairings based on role capabilities
-                </p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Button onClick={fetchMentorshipData} variant="outline">
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Refresh
-                </Button>
-                <Button
-                  onClick={() => setIsCreateAssignmentDialogOpen(true)}
-                  className="starboard-button"
-                >
-                  <Link2 className="mr-2 h-4 w-4" />
-                  Create Pairing
-                </Button>
-              </div>
-            </div>
-
-            {/* Statistics Cards */}
-            {mentorshipStatistics && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <Card className="starboard-card">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-slate-gray-600">Active Pairings</p>
-                        <p className="text-2xl font-bold text-charcoal-900">
-                          {mentorshipStatistics.activeAssignments}
-                        </p>
-                      </div>
-                      <UserCheck className="h-8 w-8 text-green-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="starboard-card">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-slate-gray-600">Total Mentors</p>
-                        <p className="text-2xl font-bold text-charcoal-900">
-                          {mentorshipStatistics.totalMentors}
-                        </p>
-                      </div>
-                      <Users className="h-8 w-8 text-blue-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="starboard-card">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-slate-gray-600">Total Mentees</p>
-                        <p className="text-2xl font-bold text-charcoal-900">
-                          {mentorshipStatistics.totalMentees}
-                        </p>
-                      </div>
-                      <UserX className="h-8 w-8 text-purple-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="starboard-card">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-slate-gray-600">Overdue Meetings</p>
-                        <p className="text-2xl font-bold text-charcoal-900">
-                          {mentorshipStatistics.overdueAssignments}
-                        </p>
-                      </div>
-                      <AlertTriangle className="h-8 w-8 text-orange-500" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Overdue Meetings Alert */}
-            {overdueAssignments.length > 0 && (
-              <Card className="starboard-card border-orange-200 bg-orange-50">
-                <CardHeader>
-                  <CardTitle className="text-orange-800 flex items-center">
-                    <AlertTriangle className="mr-2 h-5 w-5" />
-                    Overdue Check-ins ({overdueAssignments.length})
-                  </CardTitle>
-                  <CardDescription className="text-orange-700">
-                    These pairs haven't had a check-in in over 30 days
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {overdueAssignments.slice(0, 5).map(assignment => (
-                      <div
-                        key={assignment.id}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <span>
-                          {assignment.mentor.firstName} {assignment.mentor.lastName} →{' '}
-                          {assignment.mentee.firstName} {assignment.mentee.lastName}
-                        </span>
-                        <span className="text-orange-600">
-                          Due:{' '}
-                          {assignment.nextMeetingDue
-                            ? new Date(assignment.nextMeetingDue).toLocaleDateString()
-                            : 'No date set'}
-                        </span>
-                      </div>
-                    ))}
-                    {overdueAssignments.length > 5 && (
-                      <p className="text-sm text-orange-600">
-                        +{overdueAssignments.length - 5} more...
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Filters */}
-            <Card className="starboard-card">
-              <CardContent className="py-4">
-                <div className="flex items-center space-x-4">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-gray-400" />
-                    <Input
-                      placeholder="Search assignments by mentor, mentee, or email..."
-                      value={mentorshipFilters.search}
-                      onChange={e =>
-                        setMentorshipFilters(prev => ({ ...prev, search: e.target.value }))
-                      }
-                      className="pl-9"
-                    />
-                  </div>
-                  <Select
-                    value={mentorshipFilters.status}
-                    onValueChange={value =>
-                      setMentorshipFilters(prev => ({ ...prev, status: value }))
-                    }
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="All status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="ACTIVE">Active</SelectItem>
-                      <SelectItem value="PAUSED">Paused</SelectItem>
-                      <SelectItem value="TERMINATED">Terminated</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Assignments Table */}
-            <Card className="starboard-card">
-              <CardHeader>
-                <CardTitle>
-                  Mentor-Mentee Pairings ({filteredMentorshipAssignments.length})
-                </CardTitle>
-                <CardDescription>
-                  Manage mentor-mentee relationships and track progress
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Mentor</TableHead>
-                      <TableHead>Mentee</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Meetings</TableHead>
-                      <TableHead>Last Meeting</TableHead>
-                      <TableHead>Next Due</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredMentorshipAssignments.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
-                          <div className="text-slate-gray-500">
-                            <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                            <p>No pairings found</p>
-                            <p className="text-sm mt-2">Create your first pairing to get started</p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredMentorshipAssignments.map(assignment => (
-                        <TableRow key={assignment.id}>
-                          <TableCell>
-                            <div className="flex items-center space-x-3">
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-medium text-sm">
-                                {assignment.mentor.firstName?.[0]}
-                                {assignment.mentor.lastName?.[0]}
-                              </div>
-                              <div>
-                                <div className="font-medium">
-                                  {assignment.mentor.firstName} {assignment.mentor.lastName}
-                                </div>
-                                <div className="text-sm text-slate-gray-500">
-                                  {assignment.mentor.email}
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-3">
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white font-medium text-sm">
-                                {assignment.mentee.firstName?.[0]}
-                                {assignment.mentee.lastName?.[0]}
-                              </div>
-                              <div>
-                                <div className="font-medium">
-                                  {assignment.mentee.firstName} {assignment.mentee.lastName}
-                                </div>
-                                <div className="text-sm text-slate-gray-500">
-                                  {assignment.mentee.email}
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{getStatusBadge(assignment.status)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-2">
-                              <Calendar className="h-4 w-4 text-slate-gray-400" />
-                              <span className="text-sm">{assignment.totalMeetings || 0}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              {assignment.lastMeetingAt
-                                ? new Date(assignment.lastMeetingAt).toLocaleDateString()
-                                : 'Never'}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-2">
-                              {assignment.nextMeetingDue &&
-                              new Date(assignment.nextMeetingDue) < new Date() ? (
-                                <>
-                                  <Clock className="h-4 w-4 text-orange-500" />
-                                  <span className="text-sm text-orange-600">Overdue</span>
-                                </>
-                              ) : (
-                                <div className="text-sm">
-                                  {assignment.nextMeetingDue
-                                    ? new Date(assignment.nextMeetingDue).toLocaleDateString()
-                                    : 'Not set'}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSelectedAssignment(assignment)
-                                    setReassignForm({
-                                      newMentorId: '',
-                                      newMenteeId: '',
-                                      reason: '',
-                                    })
-                                    setIsReassignDialogOpen(true)
-                                  }}
-                                >
-                                  <ArrowRightLeft className="mr-2 h-4 w-4" />
-                                  Reassign
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => handleTerminateAssignment(assignment)}
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Terminate
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            {/* Create Assignment Dialog */}
-            <Dialog
-              open={isCreateAssignmentDialogOpen}
-              onOpenChange={setIsCreateAssignmentDialogOpen}
-            >
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Create Mentor-Mentee Pairing</DialogTitle>
-                  <DialogDescription>
-                    Pair a mentor with a mentee in your workspace.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <MentorSearchSelect
-                      value={assignmentForm.mentorId}
-                      onValueChange={value =>
-                        setAssignmentForm(prev => ({ ...prev, mentorId: value }))
-                      }
-                    />
-                    <MenteeSearchSelect
-                      value={assignmentForm.menteeId}
-                      onValueChange={value =>
-                        setAssignmentForm(prev => ({ ...prev, menteeId: value }))
-                      }
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="notes">Notes</Label>
-                    <Textarea
-                      id="notes"
-                      value={assignmentForm.notes}
-                      onChange={e =>
-                        setAssignmentForm(prev => ({ ...prev, notes: e.target.value }))
-                      }
-                      placeholder="Any additional notes or context for this mentorship..."
-                      rows={3}
-                      className="starboard-input"
-                    />
-                  </div>
-
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                    <p className="text-sm text-blue-800">
-                      <Info className="inline h-4 w-4 mr-1" />
-                      Each mentee can have one active mentor. Mentors can have multiple mentees.
-                    </p>
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCreateAssignmentDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreateAssignment} className="starboard-button">
-                    Create Pairing
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            {/* Reassign Dialog */}
-            <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Reassign Mentorship</DialogTitle>
-                  <DialogDescription>
-                    Change the mentor or mentee in this assignment
-                  </DialogDescription>
-                </DialogHeader>
-
-                {selectedAssignment && (
-                  <div className="space-y-4">
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-slate-gray-600">Current Assignment:</p>
-                      <p className="font-medium">
-                        {selectedAssignment.mentor.firstName} {selectedAssignment.mentor.lastName} →{' '}
-                        {selectedAssignment.mentee.firstName} {selectedAssignment.mentee.lastName}
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <ReassignmentUserSelect
-                        type="mentor"
-                        value={reassignForm.newMentorId}
-                        onValueChange={value =>
-                          setReassignForm(prev => ({ ...prev, newMentorId: value }))
-                        }
-                        currentUserId={selectedAssignment?.mentorId}
-                      />
-                      <ReassignmentUserSelect
-                        type="mentee"
-                        value={reassignForm.newMenteeId}
-                        onValueChange={value =>
-                          setReassignForm(prev => ({ ...prev, newMenteeId: value }))
-                        }
-                        currentUserId={selectedAssignment?.menteeId}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="reassignReason">Reason for Reassignment *</Label>
-                      <Textarea
-                        id="reassignReason"
-                        value={reassignForm.reason}
-                        onChange={e =>
-                          setReassignForm(prev => ({ ...prev, reason: e.target.value }))
-                        }
-                        placeholder="Please explain why this reassignment is necessary..."
-                        rows={3}
-                        className="starboard-input"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsReassignDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleReassignAssignment} className="starboard-button">
-                    Reassign
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </TabsContent>
         </Tabs>
       </div>

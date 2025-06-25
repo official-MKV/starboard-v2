@@ -3,12 +3,6 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/database'
 import { WorkspaceContext } from '@/lib/workspace-context'
 
-const broadcastToUser =
-  global.broadcastToUser ||
-  (() => {
-    console.log('WebSocket not available - message saved but not broadcasted')
-  })
-
 export async function GET(request) {
   try {
     const session = await auth()
@@ -24,13 +18,12 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url)
     const receiverId = searchParams.get('receiverId')
     const cursor = searchParams.get('cursor')
-    const limit = parseInt(searchParams.get('limit') || '1000')
+    const limit = parseInt(searchParams.get('limit') || '100')
 
     if (!receiverId) {
       return NextResponse.json({ error: 'Receiver ID required' }, { status: 400 })
     }
-    console.log(receiverId)
-    console.log(workspaceContext.workspaceId)
+
     const receiverWorkspace = await prisma.workspaceMember.findFirst({
       where: {
         userId: receiverId,
@@ -45,6 +38,7 @@ export async function GET(request) {
 
     const where = {
       isDeleted: false,
+      workspaceId: workspaceContext.workspaceId,
       OR: [
         { senderId: session.user.id, receiverId },
         { senderId: receiverId, receiverId: session.user.id },
@@ -77,7 +71,6 @@ export async function GET(request) {
       hasMore: messages.length === limit,
     })
   } catch (error) {
-    console.error('Error fetching messages:', error)
     return NextResponse.json(
       {
         error: 'Failed to load messages',
@@ -161,19 +154,110 @@ export async function POST(request) {
       },
     })
 
-    try {
-      broadcastToUser(receiverId, 'new_message', message)
-      broadcastToUser(session.user.id, 'new_message', message)
-    } catch (wsError) {
-      console.error('WebSocket broadcast failed (message still saved):', wsError)
-    }
-
     return NextResponse.json({ message }, { status: 201 })
   } catch (error) {
-    console.error('Error sending message:', error)
     return NextResponse.json(
       {
         error: 'Failed to send message',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const messageId = searchParams.get('messageId')
+
+    if (!messageId) {
+      return NextResponse.json({ error: 'Message ID required' }, { status: 400 })
+    }
+
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: { senderId: true },
+    })
+
+    if (!message || message.senderId !== session.user.id) {
+      return NextResponse.json({ error: 'Message not found or unauthorized' }, { status: 404 })
+    }
+
+    await prisma.message.update({
+      where: { id: messageId },
+      data: { isDeleted: true, deletedAt: new Date() },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: 'Failed to delete message',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(request) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const { messageId, content } = await request.json()
+
+    if (!messageId || !content) {
+      return NextResponse.json({ error: 'Message ID and content required' }, { status: 400 })
+    }
+
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: { senderId: true, createdAt: true },
+    })
+
+    if (!message || message.senderId !== session.user.id) {
+      return NextResponse.json({ error: 'Message not found or unauthorized' }, { status: 404 })
+    }
+
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000)
+    if (message.createdAt < fifteenMinutesAgo) {
+      return NextResponse.json({ error: 'Message too old to edit' }, { status: 400 })
+    }
+
+    const updatedMessage = await prisma.message.update({
+      where: { id: messageId },
+      data: {
+        content,
+        isEdited: true,
+        editedAt: new Date(),
+      },
+      include: {
+        sender: {
+          select: { id: true, firstName: true, lastName: true, avatar: true },
+        },
+        receiver: {
+          select: { id: true, firstName: true, lastName: true, avatar: true },
+        },
+        _count: {
+          select: { replies: true },
+        },
+      },
+    })
+
+    return NextResponse.json({ message: updatedMessage })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: 'Failed to edit message',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       },
       { status: 500 }
