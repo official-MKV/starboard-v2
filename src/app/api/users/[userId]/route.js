@@ -64,7 +64,7 @@ export async function GET(request, { params }) {
         createdAt: true,
         updatedAt: true,
         profileData: true,
-        // Always include workspace membership details filtered by current workspace
+
         workspaceMembers: {
           where: {
             workspaceId: workspaceContext.workspaceId,
@@ -129,10 +129,8 @@ export async function GET(request, { params }) {
       )
     }
 
-    // Transform the response to include workspace-specific details at the top level
     const responseData = {
       ...user,
-      // Add current workspace membership details for easier access
       currentWorkspace: currentWorkspaceMembership
         ? {
             membershipId: currentWorkspaceMembership.id,
