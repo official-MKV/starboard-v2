@@ -80,14 +80,7 @@ export const applicationService = {
             orderBy: { order: 'asc' },
           },
           workspace: true,
-          creator: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
+
           submissions: {
             include: {
               user: {
