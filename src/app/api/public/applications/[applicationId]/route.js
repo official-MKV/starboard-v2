@@ -18,10 +18,6 @@ export async function GET(request, { params }) {
     }
 
     // Check if application is publicly accessible
-    if (!application.isPublic) {
-      timer.log('GET', `/api/public/applications/${applicationId}`, 403)
-      return apiError('Application is not publicly accessible', 403)
-    }
 
     // Check if application is still accepting submissions
     const now = new Date()
