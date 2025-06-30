@@ -120,14 +120,7 @@ export const applicationService = {
           formFields: {
             orderBy: { order: 'asc' },
           },
-          creator: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
+
           _count: {
             select: {
               submissions: true,
