@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { WorkspaceContext } from '@/lib/workspace-context'
 import { applicationService } from '@/lib/services/application'
 import { validateRequest, apiResponse, apiError, handleApiError } from '@/lib/api-utils'
 import { logger, createRequestTimer } from '@/lib/logger'
@@ -18,7 +19,7 @@ const numberOrString = z
 const createApplicationSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
-  workspaceId: z.string().min(1, 'Workspace ID is required'),
+  // Removed workspaceId from schema since it comes from context now
   isActive: z.union([z.boolean(), z.string().transform(val => val === 'true')]).default(true),
   isPublic: z.union([z.boolean(), z.string().transform(val => val === 'true')]).default(true),
   openDate: z.string().optional(),
@@ -71,63 +72,51 @@ export async function GET(request) {
 
     if (!session?.user?.id) {
       timer.log('GET', '/api/applications', 401)
-      return apiError('Authentication required', 401)
+      return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
+    }
+
+    // Get workspace context from cookies
+    const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
+    if (!workspaceContext) {
+      timer.log('GET', '/api/applications', 400)
+      return NextResponse.json(
+        { error: { message: 'Workspace context required' } },
+        { status: 400 }
+      )
+    }
+
+    // Check permissions
+    const hasPermission = await WorkspaceContext.hasAnyPermission(
+      session.user.id,
+      workspaceContext.workspaceId,
+      ['applications.view', 'applications.manage']
+    )
+
+    if (!hasPermission) {
+      timer.log('GET', '/api/applications', 403)
+      return NextResponse.json(
+        { error: { message: 'Insufficient permissions to view applications' } },
+        { status: 403 }
+      )
     }
 
     logger.apiRequest('GET', '/api/applications', session.user.id)
 
     const { searchParams } = new URL(request.url)
-    const specificWorkspaceId = searchParams.get('workspaceId')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
     const includeInactive = searchParams.get('includeInactive') === 'true'
 
-    // Get user's workspaces from session
-    const userWorkspaces = session.user.workspaces || []
-
-    if (userWorkspaces.length === 0) {
-      timer.log('GET', '/api/applications', 200, session.user.id)
-      return apiResponse({ applications: [] })
-    }
-
-    let applications = []
-
-    if (specificWorkspaceId) {
-      // Check if user has access to specific workspace
-      const hasAccess = userWorkspaces.some(ws => ws.id === specificWorkspaceId)
-      if (!hasAccess) {
-        timer.log('GET', '/api/applications', 403, session.user.id)
-        return apiError('Access denied to workspace', 403)
-      }
-
-      applications = await applicationService.findByWorkspace(specificWorkspaceId, {
-        includeInactive,
-        page,
-        limit,
-      })
-    } else {
-      const workspaceIds = userWorkspaces.map(ws => ws.id)
-
-      for (const workspaceId of workspaceIds) {
-        const workspaceApps = await applicationService.findByWorkspace(workspaceId, {
-          includeInactive,
-          page: 1,
-          limit: 1000,
-        })
-        applications.push(...workspaceApps)
-      }
-
-      // Sort by creation date and apply pagination
-      applications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-
-      // Apply pagination
-      const startIndex = (page - 1) * limit
-      applications = applications.slice(startIndex, startIndex + limit)
-    }
+    // Use workspace from context instead of session
+    const applications = await applicationService.findByWorkspace(workspaceContext.workspaceId, {
+      includeInactive,
+      page,
+      limit,
+    })
 
     timer.log('GET', '/api/applications', 200, session.user.id)
 
-    return apiResponse({ applications })
+    return NextResponse.json({ applications })
   } catch (error) {
     logger.apiError('GET', '/api/applications', error, session?.user?.id)
     timer.log('GET', '/api/applications', 500, session?.user?.id)
@@ -145,7 +134,32 @@ export async function POST(request) {
 
     if (!session?.user?.id) {
       timer.log('POST', '/api/applications', 401)
-      return apiError('Authentication required', 401)
+      return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
+    }
+
+    // Get workspace context from cookies
+    const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
+    if (!workspaceContext) {
+      timer.log('POST', '/api/applications', 400)
+      return NextResponse.json(
+        { error: { message: 'Workspace context required' } },
+        { status: 400 }
+      )
+    }
+
+    // Check permissions
+    const hasPermission = await WorkspaceContext.hasPermission(
+      session.user.id,
+      workspaceContext.workspaceId,
+      'applications.manage'
+    )
+
+    if (!hasPermission) {
+      timer.log('POST', '/api/applications', 403)
+      return NextResponse.json(
+        { error: { message: 'Insufficient permissions to create applications' } },
+        { status: 403 }
+      )
     }
 
     logger.apiRequest('POST', '/api/applications', session.user.id)
@@ -159,7 +173,10 @@ export async function POST(request) {
         error: parseError.message,
       })
       timer.log('POST', '/api/applications', 400, session.user.id)
-      return apiError('Invalid JSON in request body', 400)
+      return NextResponse.json(
+        { error: { message: 'Invalid JSON in request body' } },
+        { status: 400 }
+      )
     }
 
     // Validate request data
@@ -173,13 +190,22 @@ export async function POST(request) {
         body: requestBody,
       })
       timer.log('POST', '/api/applications', 400, session.user.id)
-      return apiError('Validation failed', 400, {
-        code: 'VALIDATION_ERROR',
-        errors: validation.error.errors,
-      })
+      return NextResponse.json(
+        {
+          error: {
+            message: 'Validation failed',
+            code: 'VALIDATION_ERROR',
+            errors: validation.error.errors,
+          },
+        },
+        { status: 400 }
+      )
     }
 
     const data = validation.data
+
+    // Add workspace ID from context instead of request body
+    data.workspaceId = workspaceContext.workspaceId
 
     // Convert date strings to Date objects if provided
     if (data.openDate) {
@@ -194,7 +220,7 @@ export async function POST(request) {
           openDate: data.openDate,
         })
         timer.log('POST', '/api/applications', 400, session.user.id)
-        return apiError('Invalid openDate format', 400)
+        return NextResponse.json({ error: { message: 'Invalid openDate format' } }, { status: 400 })
       }
     }
 
@@ -210,7 +236,10 @@ export async function POST(request) {
           closeDate: data.closeDate,
         })
         timer.log('POST', '/api/applications', 400, session.user.id)
-        return apiError('Invalid closeDate format', 400)
+        return NextResponse.json(
+          { error: { message: 'Invalid closeDate format' } },
+          { status: 400 }
+        )
       }
     }
 
@@ -222,7 +251,10 @@ export async function POST(request) {
         closeDate: data.closeDate,
       })
       timer.log('POST', '/api/applications', 400, session.user.id)
-      return apiError('Close date must be after open date', 400)
+      return NextResponse.json(
+        { error: { message: 'Close date must be after open date' } },
+        { status: 400 }
+      )
     }
 
     // Create the application

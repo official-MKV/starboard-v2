@@ -104,7 +104,6 @@ export default function CreateApplicationPage() {
         ...applicationData,
         isActive: publish ? true : applicationData.isActive,
         workspaceId: session?.user?.workspaces?.[0]?.id, // Use first workspace
-        createdBy: session?.user?.id,
       }
 
       const response = await fetch('/api/applications', {
