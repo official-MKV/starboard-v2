@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PermissionWrapper } from '@/components/permissionWrapper'
 import {
   FileText,
   Users,
@@ -12,7 +13,7 @@ import {
   Eye,
   Calendar,
 } from 'lucide-react'
-
+import { PERMISSIONS } from '@/lib/utils/permissions'
 export function ApplicationStats({ userId, workspaces }) {
   const [stats, setStats] = useState({
     totalApplications: 0,
@@ -21,24 +22,48 @@ export function ApplicationStats({ userId, workspaces }) {
     pendingReviews: 0,
     acceptanceRate: 0,
     thisWeekSubmissions: 0,
+    avgReviewTime: 0,
     loading: true,
+    error: null,
   })
 
   useEffect(() => {
-    // Simulate API call to fetch stats
     const fetchStats = async () => {
-      // In a real app, this would be an API call
-      setTimeout(() => {
-        setStats({
-          totalApplications: 8,
-          activeApplications: 3,
-          totalSubmissions: 247,
-          pendingReviews: 23,
-          acceptanceRate: 12.5,
-          thisWeekSubmissions: 17,
-          loading: false,
+      try {
+        setStats(prev => ({ ...prev, loading: true, error: null }))
+
+        const response = await fetch('/api/applications/statistics', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
         })
-      }, 500)
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch application statistics')
+        }
+
+        const data = await response.json()
+
+        setStats({
+          totalApplications: data.totalApplications || 0,
+          activeApplications: data.activeApplications || 0,
+          totalSubmissions: data.totalSubmissions || 0,
+          pendingReviews: data.pendingReviews || 0,
+          acceptanceRate: data.acceptanceRate || 0,
+          thisWeekSubmissions: data.thisWeekSubmissions || 0,
+          avgReviewTime: data.avgReviewTime || 0,
+          loading: false,
+          error: null,
+        })
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+        setStats(prev => ({
+          ...prev,
+          loading: false,
+          error: error.message,
+        }))
+      }
     }
 
     fetchStats()
@@ -52,6 +77,7 @@ export function ApplicationStats({ userId, workspaces }) {
       changeType: 'positive',
       icon: FileText,
       color: 'blue',
+      permission: PERMISSIONS.APPLICATIONS_VIEW,
     },
     {
       title: 'Active Applications',
@@ -60,6 +86,7 @@ export function ApplicationStats({ userId, workspaces }) {
       changeType: 'neutral',
       icon: Clock,
       color: 'green',
+      permission: PERMISSIONS.APPLICATIONS_VIEW,
     },
     {
       title: 'Total Submissions',
@@ -68,6 +95,7 @@ export function ApplicationStats({ userId, workspaces }) {
       changeType: 'positive',
       icon: Users,
       color: 'purple',
+      permission: PERMISSIONS.APPLICATIONS_VIEW,
     },
     {
       title: 'Pending Reviews',
@@ -76,6 +104,7 @@ export function ApplicationStats({ userId, workspaces }) {
       changeType: 'warning',
       icon: Eye,
       color: 'orange',
+      permission: PERMISSIONS.APPLICATIONS_REVIEW,
     },
     {
       title: 'Acceptance Rate',
@@ -84,14 +113,16 @@ export function ApplicationStats({ userId, workspaces }) {
       changeType: 'positive',
       icon: CheckCircle,
       color: 'emerald',
+      permission: PERMISSIONS.ANALYTICS_VIEW,
     },
     {
       title: 'Avg. Review Time',
-      value: '3.2 days',
+      value: `${stats.avgReviewTime} days`,
       change: '-0.8 days improvement',
       changeType: 'positive',
       icon: Calendar,
       color: 'indigo',
+      permission: PERMISSIONS.ANALYTICS_VIEW,
     },
   ]
 
@@ -111,36 +142,64 @@ export function ApplicationStats({ userId, workspaces }) {
     )
   }
 
+  if (stats.error) {
+    return (
+      <Card className="starboard-card">
+        <CardContent className="pt-6">
+          <div className="text-center">
+            <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+            <p className="text-red-600 mb-2">Failed to load statistics</p>
+            <p className="text-sm text-slate-gray-500">{stats.error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
       {statCards.map((stat, index) => {
         const Icon = stat.icon
 
         return (
-          <Card key={index} className="starboard-card hover:shadow-soft-lg transition-shadow">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-2">
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${getIconBackground(
-                    stat.color
-                  )}`}
-                >
-                  <Icon className={`h-4 w-4 ${getIconColor(stat.color)}`} />
+          <PermissionWrapper
+            key={index}
+            permission={stat.permission}
+            fallback={
+              <Card className="starboard-card opacity-50">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-center h-24">
+                    <p className="text-xs text-slate-gray-400 text-center">No permission to view</p>
+                  </div>
+                </CardContent>
+              </Card>
+            }
+          >
+            <Card className="starboard-card hover:shadow-soft-lg transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center ${getIconBackground(
+                      stat.color
+                    )}`}
+                  >
+                    <Icon className={`h-4 w-4 ${getIconColor(stat.color)}`} />
+                  </div>
+                  <div
+                    className={`text-xs px-2 py-1 rounded-full ${getChangeColor(stat.changeType)}`}
+                  >
+                    {getChangeIcon(stat.changeType)}
+                  </div>
                 </div>
-                <div
-                  className={`text-xs px-2 py-1 rounded-full ${getChangeColor(stat.changeType)}`}
-                >
-                  {getChangeIcon(stat.changeType)}
-                </div>
-              </div>
 
-              <div className="space-y-1">
-                <p className="text-2xl font-bold text-charcoal-900">{stat.value}</p>
-                <p className="text-xs font-medium text-slate-gray-600">{stat.title}</p>
-                <p className={`text-xs ${getChangeTextColor(stat.changeType)}`}>{stat.change}</p>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="space-y-1">
+                  <p className="text-2xl font-bold text-charcoal-900">{stat.value}</p>
+                  <p className="text-xs font-medium text-slate-gray-600">{stat.title}</p>
+                  <p className={`text-xs ${getChangeTextColor(stat.changeType)}`}>{stat.change}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </PermissionWrapper>
         )
       })}
     </div>

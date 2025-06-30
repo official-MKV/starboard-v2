@@ -54,7 +54,6 @@ import {
   Crown,
   Edit,
   RefreshCw,
-  Settings,
   Shield,
   UserX,
   UserCheck,
@@ -67,7 +66,6 @@ import {
   Clock,
   Languages,
 } from 'lucide-react'
-
 import { MentorSearchSelect } from './UserSearchSelect'
 
 // Mock roles data - replace with actual API call
@@ -100,12 +98,10 @@ export default function UserDetailPage() {
     mentorId: '',
     notes: '',
   })
-
   const [reassignForm, setReassignForm] = useState({
     newMentorId: '',
     reason: '',
   })
-
   const [roleForm, setRoleForm] = useState({
     roleId: '',
     reason: '',
@@ -125,7 +121,7 @@ export default function UserDetailPage() {
       if (response.ok) {
         const data = await response.json()
         setUser(data.data.user)
-
+        console.log(data.data.user)
         setRoleForm(prev => ({ ...prev, roleId: data.data.user.currentWorkspace?.role?.id || '' }))
       } else {
         toast.error('Failed to load user details')
@@ -375,12 +371,15 @@ export default function UserDetailPage() {
       if (type === 'date' && value) {
         return new Date(value).toLocaleDateString()
       }
+
       if (type === 'boolean') {
         return value ? 'Yes' : 'No'
       }
+
       if (Array.isArray(value)) {
         return value.join(', ')
       }
+
       return value
     }
 
@@ -421,11 +420,14 @@ export default function UserDetailPage() {
   const currentWorkspace = user.currentWorkspace
   const personalData = user.profileData || []
 
+  // Only show mentorship section if user can be mentored AND has a mentor assigned
+  const showMentorshipSection = currentRole?.canBeMentee && mentorshipData.asMentee
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-row lg:items-center justify-between gap-6 mb-8">
           <div className="flex items-center space-x-4">
             <Button
               variant="outline"
@@ -433,155 +435,146 @@ export default function UserDetailPage() {
               className="flex items-center space-x-2"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Back to Users</span>
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {user.firstName} {user.lastName}
-              </h1>
-              <p className="text-gray-600 mt-1">{user.email}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            {/* Action Buttons */}
-            <Button
-              variant="outline"
-              onClick={() => setIsChangeRoleDialogOpen(true)}
-              className="flex items-center space-x-2"
-            >
-              <Shield className="h-4 w-4" />
-              <span>Change Role</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={handleToggleUserStatus}
-              className={`flex items-center space-x-2 ${
-                user.isActive
-                  ? 'text-red-600 hover:text-red-700 hover:bg-red-50'
-                  : 'text-green-600 hover:text-green-700 hover:bg-green-50'
-              }`}
-            >
-              {user.isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-              <span>{user.isActive ? 'Deactivate' : 'Activate'}</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteUserDialogOpen(true)}
-              className="flex items-center space-x-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span>Delete User</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => fetchUserDetails()}
-              className="flex items-center space-x-2"
-            >
-              <RefreshCw className="h-4 w-4" />
-              <span>Refresh</span>
+              <span>Back</span>
             </Button>
 
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-xl font-bold">
               {user.firstName?.[0]}
               {user.lastName?.[0]}
             </div>
+
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {user.firstName} {user.lastName}
+              </h1>
+              <p className="text-gray-600">{user.email}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge
+                  className={
+                    user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }
+                >
+                  {user.isActive ? 'Active' : 'Inactive'}
+                </Badge>
+                {currentRole && (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: currentRole.color }}
+                    />
+                    {currentRole.name}
+                    {currentRole.isDefault && <Crown className="h-3 w-3 text-yellow-500" />}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsChangeRoleDialogOpen(true)}>
+              <Shield className="h-4 w-4 mr-2" />
+              Change Role
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleUserStatus}
+              className={
+                user.isActive
+                  ? 'text-red-600 hover:text-red-700'
+                  : 'text-green-600 hover:text-green-700'
+              }
+            >
+              {user.isActive ? (
+                <UserX className="h-4 w-4 mr-2" />
+              ) : (
+                <UserCheck className="h-4 w-4 mr-2" />
+              )}
+              {user.isActive ? 'Deactivate' : 'Activate'}
+            </Button>
+
+            <Button variant="outline" size="sm" onClick={() => fetchUserDetails()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDeleteUserDialogOpen(true)}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
           </div>
         </div>
 
-        {/* Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Role</p>
-                  <div className="flex items-center space-x-2 mt-1">
-                    {currentRole && (
-                      <>
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: currentRole.color }}
-                        />
-                        <span className="font-medium">{currentRole.name}</span>
-                        {currentRole.isDefault && <Crown className="h-3 w-3 text-yellow-500" />}
-                      </>
-                    )}
-                    {!currentRole && <span className="text-gray-400">No role assigned</span>}
-                  </div>
-                </div>
-                <User className="h-8 w-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Account Status</p>
+                  <p className="text-sm text-gray-600">Email Status</p>
                   <Badge
                     className={
-                      user.isActive
+                      user.isEmailVerified
                         ? 'bg-green-100 text-green-800 mt-1'
-                        : 'bg-red-100 text-red-800 mt-1'
+                        : 'bg-yellow-100 text-yellow-800 mt-1'
                     }
                   >
-                    {user.isActive ? 'Active' : 'Inactive'}
+                    {user.isEmailVerified ? 'Verified' : 'Unverified'}
                   </Badge>
                 </div>
-                <CheckCircle
-                  className={`h-8 w-8 ${user.isActive ? 'text-green-500' : 'text-red-500'}`}
-                />
+                <Mail className="h-8 w-8 text-blue-500" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Workspace Status</p>
+                  <p className="text-sm text-gray-600">Onboarding</p>
                   <Badge
                     className={
-                      currentWorkspace?.isActive
+                      currentWorkspace?.onboardingCompletedAt
                         ? 'bg-green-100 text-green-800 mt-1'
-                        : 'bg-red-100 text-red-800 mt-1'
+                        : 'bg-yellow-100 text-yellow-800 mt-1'
                     }
                   >
-                    {currentWorkspace?.isActive ? 'Active' : 'Inactive'}
+                    {currentWorkspace?.onboardingCompletedAt ? 'Completed' : 'Pending'}
                   </Badge>
                 </div>
-                <Settings className="h-8 w-8 text-purple-500" />
+                <CheckCircle className="h-8 w-8 text-green-500" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Joined</p>
+                  <p className="text-sm text-gray-600">Member Since</p>
                   <p className="text-sm font-medium mt-1">
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
                   </p>
                 </div>
-                <Calendar className="h-8 w-8 text-indigo-500" />
+                <Calendar className="h-8 w-8 text-purple-500" />
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Content Grid */}
+        {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* User Information */}
           <Card>
             <CardHeader>
               <CardTitle>User Information</CardTitle>
-              <CardDescription>Basic information about this user</CardDescription>
+              <CardDescription>Basic profile information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -619,73 +612,27 @@ export default function UserDetailPage() {
                 </div>
               </div>
 
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Bio</Label>
-                <p className="text-sm mt-1">{user.bio || 'N/A'}</p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {user.bio && (
                 <div>
-                  <Label className="text-sm font-medium text-gray-700">Email Verified</Label>
-                  <Badge
-                    className={
-                      user.isEmailVerified
-                        ? 'bg-green-100 text-green-800 mt-1'
-                        : 'bg-yellow-100 text-yellow-800 mt-1'
-                    }
-                  >
-                    {user.isEmailVerified ? 'Verified' : 'Unverified'}
-                  </Badge>
+                  <Label className="text-sm font-medium text-gray-700">Bio</Label>
+                  <p className="text-sm mt-1">{user.bio}</p>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-700">Onboarding Status</Label>
-                  <Badge
-                    className={
-                      currentWorkspace?.onboardingCompletedAt
-                        ? 'bg-green-100 text-green-800 mt-1'
-                        : 'bg-yellow-100 text-yellow-800 mt-1'
-                    }
-                  >
-                    {currentWorkspace?.onboardingCompletedAt ? 'Completed' : 'Pending'}
-                  </Badge>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Mentorship Information */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Mentorship</CardTitle>
-                  <CardDescription>Mentors assigned to {user.firstName}</CardDescription>
+          {/* Mentorship Information - Only show if user can be mentored AND has a mentor */}
+          {showMentorshipSection && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Mentorship</CardTitle>
+                    <CardDescription>Current mentor assignment</CardDescription>
+                  </div>
                 </div>
-                {currentRole?.canBeMentee && !mentorshipData.asMentee && (
-                  <Button
-                    onClick={() => setIsAssignMentorDialogOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Link2 className="mr-2 h-4 w-4" />
-                    Assign Mentor
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {!currentRole?.canBeMentee ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Info className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <p className="font-medium">Cannot be mentored</p>
-                  <p className="text-sm mt-2">This user's role doesn't allow being mentored</p>
-                </div>
-              ) : !mentorshipData.asMentee ? (
-                <div className="text-center py-8 text-gray-500">
-                  <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-orange-400" />
-                  <p className="font-medium">No mentor assigned</p>
-                  <p className="text-sm mt-2">This user needs to be paired with a mentor</p>
-                </div>
-              ) : (
+              </CardHeader>
+              <CardContent>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-3">
@@ -757,9 +704,35 @@ export default function UserDetailPage() {
                     </div>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Show assign mentor option if user can be mentored but has no mentor */}
+          {currentRole?.canBeMentee && !mentorshipData.asMentee && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Mentorship</CardTitle>
+                <CardDescription>No mentor assigned</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-orange-400" />
+                  <p className="font-medium mb-2">No mentor assigned</p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    This user needs to be paired with a mentor
+                  </p>
+                  <Button
+                    onClick={() => setIsAssignMentorDialogOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Link2 className="mr-2 h-4 w-4" />
+                    Assign Mentor
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Personal Data Section */}
@@ -778,7 +751,6 @@ export default function UserDetailPage() {
         )}
 
         {/* Dialogs */}
-
         {/* Assign Mentor Dialog */}
         <Dialog open={isAssignMentorDialogOpen} onOpenChange={setIsAssignMentorDialogOpen}>
           <DialogContent className="max-w-2xl">
@@ -786,13 +758,11 @@ export default function UserDetailPage() {
               <DialogTitle>Assign Mentor</DialogTitle>
               <DialogDescription>Assign a mentor to {user.firstName}</DialogDescription>
             </DialogHeader>
-
             <div className="space-y-4">
               <MentorSearchSelect
                 value={mentorForm.mentorId}
                 onValueChange={value => setMentorForm(prev => ({ ...prev, mentorId: value }))}
               />
-
               <div>
                 <Label htmlFor="mentorNotes">Notes</Label>
                 <Textarea
@@ -804,7 +774,6 @@ export default function UserDetailPage() {
                 />
               </div>
             </div>
-
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAssignMentorDialogOpen(false)}>
                 Cancel
@@ -823,13 +792,11 @@ export default function UserDetailPage() {
               <DialogTitle>Reassign Mentor</DialogTitle>
               <DialogDescription>Reassign {user.firstName} to a new mentor</DialogDescription>
             </DialogHeader>
-
             <div className="space-y-4">
               <MentorSearchSelect
                 value={reassignForm.newMentorId}
                 onValueChange={value => setReassignForm(prev => ({ ...prev, newMentorId: value }))}
               />
-
               <div>
                 <Label htmlFor="reassignReason">Reason for Reassignment *</Label>
                 <Textarea
@@ -842,7 +809,6 @@ export default function UserDetailPage() {
                 />
               </div>
             </div>
-
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsReassignDialogOpen(false)}>
                 Cancel
@@ -863,7 +829,6 @@ export default function UserDetailPage() {
                 Change the role for {user.firstName} {user.lastName}
               </DialogDescription>
             </DialogHeader>
-
             <div className="space-y-4">
               <div>
                 <Label htmlFor="roleSelect">New Role</Label>
@@ -889,7 +854,6 @@ export default function UserDetailPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div>
                 <Label htmlFor="roleChangeReason">Reason for Role Change *</Label>
                 <Textarea
@@ -902,7 +866,6 @@ export default function UserDetailPage() {
                 />
               </div>
             </div>
-
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsChangeRoleDialogOpen(false)}>
                 Cancel

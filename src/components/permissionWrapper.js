@@ -1,3 +1,4 @@
+'use client'
 import { usePermissions } from '@/lib/hooks/usePermissions'
 
 export const PermissionWrapper = ({

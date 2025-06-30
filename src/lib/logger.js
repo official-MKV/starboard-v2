@@ -364,7 +364,6 @@ export const logger = {
   },
 }
 
-// Request timing middleware helper
 export function createRequestTimer() {
   const start = Date.now()
 

@@ -77,28 +77,53 @@ export async function GET(request) {
     logger.apiRequest('GET', '/api/applications', session.user.id)
 
     const { searchParams } = new URL(request.url)
-    const workspaceId = searchParams.get('workspaceId')
+    const specificWorkspaceId = searchParams.get('workspaceId')
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '10')
+    const limit = parseInt(searchParams.get('limit') || '50')
     const includeInactive = searchParams.get('includeInactive') === 'true'
 
-    if (!workspaceId) {
-      timer.log('GET', '/api/applications', 400, session.user.id)
-      return apiError('Workspace ID is required', 400)
+    // Get user's workspaces from session
+    const userWorkspaces = session.user.workspaces || []
+
+    if (userWorkspaces.length === 0) {
+      timer.log('GET', '/api/applications', 200, session.user.id)
+      return apiResponse({ applications: [] })
     }
 
-    // Check if user has access to workspace
-    const hasAccess = session.user.workspaces?.some(ws => ws.id === workspaceId)
-    if (!hasAccess) {
-      timer.log('GET', '/api/applications', 403, session.user.id)
-      return apiError('Access denied to workspace', 403)
-    }
+    let applications = []
 
-    const applications = await applicationService.findByWorkspace(workspaceId, {
-      includeInactive,
-      page,
-      limit,
-    })
+    if (specificWorkspaceId) {
+      // Check if user has access to specific workspace
+      const hasAccess = userWorkspaces.some(ws => ws.id === specificWorkspaceId)
+      if (!hasAccess) {
+        timer.log('GET', '/api/applications', 403, session.user.id)
+        return apiError('Access denied to workspace', 403)
+      }
+
+      applications = await applicationService.findByWorkspace(specificWorkspaceId, {
+        includeInactive,
+        page,
+        limit,
+      })
+    } else {
+      const workspaceIds = userWorkspaces.map(ws => ws.id)
+
+      for (const workspaceId of workspaceIds) {
+        const workspaceApps = await applicationService.findByWorkspace(workspaceId, {
+          includeInactive,
+          page: 1,
+          limit: 1000,
+        })
+        applications.push(...workspaceApps)
+      }
+
+      // Sort by creation date and apply pagination
+      applications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+      // Apply pagination
+      const startIndex = (page - 1) * limit
+      applications = applications.slice(startIndex, startIndex + limit)
+    }
 
     timer.log('GET', '/api/applications', 200, session.user.id)
 

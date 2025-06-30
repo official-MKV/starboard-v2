@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { PermissionWrapper } from '@/components/permissionWrapper'
 import {
   Search,
   Filter,
@@ -16,10 +17,10 @@ import {
   Calendar,
   Eye,
   BarChart3,
-  Download,
   Settings,
 } from 'lucide-react'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
+import { PERMISSIONS } from '@/lib/utils/permissions'
 
 export function ApplicationsList({ userId, workspaces }) {
   const [applications, setApplications] = useState([])
@@ -27,55 +28,39 @@ export function ApplicationsList({ userId, workspaces }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  // Sample data - replace with API call
+  // Fetch applications from API
   useEffect(() => {
-    // Simulate API call
-    const sampleApplications = [
-      {
-        id: 'app_1',
-        title: 'Spring 2024 Accelerator Program',
-        description: 'Our flagship 12-week accelerator program for early-stage startups',
-        status: 'active',
-        isPublic: true,
-        submissionCount: 47,
-        openDate: new Date('2024-01-15'),
-        closeDate: new Date('2024-03-15'),
-        createdAt: new Date('2024-01-01'),
-        workspace: { name: 'TechHub Accelerator' },
-      },
-      {
-        id: 'app_2',
-        title: 'FinTech Innovation Challenge',
-        description: 'Specialized program for financial technology startups',
-        status: 'active',
-        isPublic: true,
-        submissionCount: 23,
-        openDate: new Date('2024-02-01'),
-        closeDate: new Date('2024-04-01'),
-        createdAt: new Date('2024-01-20'),
-        workspace: { name: 'TechHub Accelerator' },
-      },
-      {
-        id: 'app_3',
-        title: 'SaaS Bootcamp Fall 2023',
-        description: 'Completed program for SaaS companies',
-        status: 'closed',
-        isPublic: false,
-        submissionCount: 156,
-        openDate: new Date('2023-08-01'),
-        closeDate: new Date('2023-09-30'),
-        createdAt: new Date('2023-07-15'),
-        workspace: { name: 'TechHub Accelerator' },
-      },
-    ]
+    const fetchApplications = async () => {
+      try {
+        setIsLoading(true)
+        const response = await fetch('/api/applications', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
 
-    setTimeout(() => {
-      setApplications(sampleApplications)
-      setFilteredApplications(sampleApplications)
-      setIsLoading(false)
-    }, 500)
-  }, [])
+        if (!response.ok) {
+          throw new Error('Failed to fetch applications')
+        }
+
+        const data = await response.json()
+        setApplications(data.applications || [])
+        setFilteredApplications(data.applications || [])
+      } catch (err) {
+        console.error('Error fetching applications:', err)
+        setError(err.message)
+        setApplications([])
+        setFilteredApplications([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchApplications()
+  }, [userId, workspaces])
 
   // Filter applications based on search and status
   useEffect(() => {
@@ -85,7 +70,7 @@ export function ApplicationsList({ userId, workspaces }) {
       filtered = filtered.filter(
         app =>
           app.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          app.description.toLowerCase().includes(searchTerm.toLowerCase())
+          (app.description && app.description.toLowerCase().includes(searchTerm.toLowerCase()))
       )
     }
 
@@ -94,11 +79,11 @@ export function ApplicationsList({ userId, workspaces }) {
         const now = new Date()
         switch (statusFilter) {
           case 'active':
-            return app.status === 'active' && (!app.closeDate || app.closeDate > now)
+            return app.isActive && (!app.closeDate || new Date(app.closeDate) > now)
           case 'closed':
-            return app.status === 'closed' || (app.closeDate && app.closeDate <= now)
+            return !app.isActive || (app.closeDate && new Date(app.closeDate) <= now)
           case 'draft':
-            return app.status === 'draft'
+            return !app.isPublic
           default:
             return true
         }
@@ -115,25 +100,63 @@ export function ApplicationsList({ userId, workspaces }) {
       return <Badge variant="secondary">Draft</Badge>
     }
 
-    if (application.closeDate && application.closeDate <= now) {
+    if (application.closeDate && new Date(application.closeDate) <= now) {
       return <Badge variant="destructive">Closed</Badge>
     }
 
-    if (application.openDate && application.openDate > now) {
+    if (application.openDate && new Date(application.openDate) > now) {
       return <Badge variant="warning">Scheduled</Badge>
     }
 
     return <Badge variant="success">Active</Badge>
   }
 
-  const handleDuplicateApplication = applicationId => {
-    // TODO: Implement duplication logic
-    console.log('Duplicate application:', applicationId)
+  const handleDuplicateApplication = async applicationId => {
+    try {
+      const response = await fetch(`/api/applications/${applicationId}/duplicate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to duplicate application')
+      }
+
+      // Refresh the list
+      window.location.reload()
+    } catch (err) {
+      console.error('Error duplicating application:', err)
+      // You could show a toast notification here
+    }
   }
 
-  const handleDeleteApplication = applicationId => {
-    // TODO: Implement deletion logic
-    console.log('Delete application:', applicationId)
+  const handleDeleteApplication = async applicationId => {
+    if (
+      !confirm('Are you sure you want to delete this application? This action cannot be undone.')
+    ) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/applications/${applicationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete application')
+      }
+
+      // Remove from local state
+      setApplications(prev => prev.filter(app => app.id !== applicationId))
+    } catch (err) {
+      console.error('Error deleting application:', err)
+      // You could show a toast notification here
+    }
   }
 
   if (isLoading) {
@@ -144,6 +167,21 @@ export function ApplicationsList({ userId, workspaces }) {
             <div className="h-24 bg-slate-gray-100 rounded-lg"></div>
           </div>
         ))}
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Search className="h-8 w-8 text-red-400" />
+        </div>
+        <p className="text-red-600 mb-2">Failed to load applications</p>
+        <p className="text-sm text-slate-gray-500 mb-4">{error}</p>
+        <Button onClick={() => window.location.reload()} variant="outline">
+          Try Again
+        </Button>
       </div>
     )
   }
@@ -196,9 +234,11 @@ export function ApplicationsList({ userId, workspaces }) {
               : 'Create your first application to get started'}
           </p>
           {!searchTerm && (
-            <Link href="/applications/create">
-              <Button className="starboard-button">Create Application</Button>
-            </Link>
+            <PermissionWrapper permission={PERMISSIONS.APPLICATIONS_CREATE} fallback={null}>
+              <Link href="/applications/create">
+                <Button className="starboard-button">Create Application</Button>
+              </Link>
+            </PermissionWrapper>
           )}
         </div>
       ) : (
@@ -216,41 +256,47 @@ export function ApplicationsList({ userId, workspaces }) {
                     {!application.isPublic && <Badge variant="outline">Private</Badge>}
                   </div>
 
-                  <p className="text-slate-gray-600 mb-4">{application.description}</p>
+                  {application.description && (
+                    <p className="text-slate-gray-600 mb-4">{application.description}</p>
+                  )}
 
                   <div className="flex items-center space-x-6 text-sm text-slate-gray-500">
                     <div className="flex items-center space-x-1">
                       <Users className="h-4 w-4" />
-                      <span>{application.submissionCount} submissions</span>
+                      <span>{application.submissionCount || 0} submissions</span>
                     </div>
 
                     {application.closeDate && (
                       <div className="flex items-center space-x-1">
                         <Calendar className="h-4 w-4" />
-                        <span>Closes {formatRelativeTime(application.closeDate)}</span>
+                        <span>Closes {formatRelativeTime(new Date(application.closeDate))}</span>
                       </div>
                     )}
 
                     <div className="flex items-center space-x-1">
-                      <span>Created {formatRelativeTime(application.createdAt)}</span>
+                      <span>Created {formatRelativeTime(new Date(application.createdAt))}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-2 ml-4">
-                  <Link href={`/applications/${application.id}/submissions`}>
-                    <Button variant="outline" size="sm">
-                      <Users className="mr-2 h-4 w-4" />
-                      {application.submissionCount}
-                    </Button>
-                  </Link>
+                  <PermissionWrapper permission={PERMISSIONS.APPLICATIONS_REVIEW} fallback={null}>
+                    <Link href={`/applications/${application.id}/submissions`}>
+                      <Button variant="outline" size="sm">
+                        <Users className="mr-2 h-4 w-4" />
+                        {application.submissionCount || 0}
+                      </Button>
+                    </Link>
+                  </PermissionWrapper>
 
-                  <Link href={`/applications/${application.id}/analytics`}>
-                    <Button variant="outline" size="sm">
-                      <BarChart3 className="mr-2 h-4 w-4" />
-                      Analytics
-                    </Button>
-                  </Link>
+                  <PermissionWrapper permission={PERMISSIONS.ANALYTICS_VIEW} fallback={null}>
+                    <Link href={`/applications/${application.id}/analytics`}>
+                      <Button variant="outline" size="sm">
+                        <BarChart3 className="mr-2 h-4 w-4" />
+                        Analytics
+                      </Button>
+                    </Link>
+                  </PermissionWrapper>
 
                   <div className="relative group">
                     <Button variant="outline" size="sm">
@@ -268,39 +314,58 @@ export function ApplicationsList({ userId, workspaces }) {
                           View Details
                         </Link>
 
-                        <Link
-                          href={`/applications/${application.id}/edit`}
-                          className="flex items-center px-4 py-2 text-sm text-charcoal-700 hover:bg-slate-gray-50"
+                        <PermissionWrapper
+                          permission={PERMISSIONS.APPLICATIONS_EDIT}
+                          fallback={null}
                         >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Application
-                        </Link>
+                          <Link
+                            href={`/applications/${application.id}/edit`}
+                            className="flex items-center px-4 py-2 text-sm text-charcoal-700 hover:bg-slate-gray-50"
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit Application
+                          </Link>
+                        </PermissionWrapper>
 
-                        <Link
-                          href={`/applications/${application.id}/settings`}
-                          className="flex items-center px-4 py-2 text-sm text-charcoal-700 hover:bg-slate-gray-50"
+                        <PermissionWrapper
+                          permission={PERMISSIONS.APPLICATIONS_MANAGE}
+                          fallback={null}
                         >
-                          <Settings className="mr-2 h-4 w-4" />
-                          Settings
-                        </Link>
+                          <Link
+                            href={`/applications/${application.id}/settings`}
+                            className="flex items-center px-4 py-2 text-sm text-charcoal-700 hover:bg-slate-gray-50"
+                          >
+                            <Settings className="mr-2 h-4 w-4" />
+                            Settings
+                          </Link>
+                        </PermissionWrapper>
 
-                        <button
-                          onClick={() => handleDuplicateApplication(application.id)}
-                          className="flex items-center w-full px-4 py-2 text-sm text-charcoal-700 hover:bg-slate-gray-50"
+                        <PermissionWrapper
+                          permission={PERMISSIONS.APPLICATIONS_CREATE}
+                          fallback={null}
                         >
-                          <Copy className="mr-2 h-4 w-4" />
-                          Duplicate
-                        </button>
+                          <button
+                            onClick={() => handleDuplicateApplication(application.id)}
+                            className="flex items-center w-full px-4 py-2 text-sm text-charcoal-700 hover:bg-slate-gray-50"
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Duplicate
+                          </button>
+                        </PermissionWrapper>
 
-                        <div className="border-t border-neutral-200"></div>
-
-                        <button
-                          onClick={() => handleDeleteApplication(application.id)}
-                          className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                        <PermissionWrapper
+                          permission={PERMISSIONS.APPLICATIONS_DELETE}
+                          fallback={null}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </button>
+                          <div className="border-t border-neutral-200"></div>
+                          <button
+                            onClick={() => handleDeleteApplication(application.id)}
+                            className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </button>
+                        </PermissionWrapper>
                       </div>
                     </div>
                   </div>

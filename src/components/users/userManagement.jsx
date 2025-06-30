@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import {useRouter} from "next/navigation"
 import { useRequireWorkspace } from '@/lib/hooks/auth'
 import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -1346,7 +1347,7 @@ export default function UsersManagement() {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                 <DropdownMenuItem
-                                  onClick={() => (window.location.href = `/users/${user.id}`)}
+                                  onClick={() => (router.push(`/users/${user.id}`))}
                                 >
                                   <Eye className="mr-2 h-4 w-4" />
                                   View Details

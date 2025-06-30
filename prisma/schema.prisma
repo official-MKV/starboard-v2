@@ -102,7 +102,7 @@ model User {
   sentMessages         Message[]          @relation("MessageSender")
   receivedMessages     Message[]          @relation("MessageReceiver")
   sentInvitations      UserInvitation[]   @relation("SentInvitations")
-  createdApplications  Application[]
+
   applications         ApplicationSubmission[]
   reviewedApplications ApplicationSubmission[] @relation("ApplicationReviewer")
   applicationComments  ApplicationComment[]
@@ -466,7 +466,7 @@ model Application {
   createdBy   String @default("cmb52xu4g0000ncfotw25bjco")
 
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  creator       User      @relation(fields: [createdBy], references: [id])
+
   formFields    ApplicationField[]
   submissions   ApplicationSubmission[]
    activities Activity[]

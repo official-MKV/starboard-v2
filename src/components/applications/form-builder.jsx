@@ -6,16 +6,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Plus,
   Trash2,
@@ -34,41 +38,113 @@ import {
   CheckSquare,
   Upload,
   Star,
-  Palette,
+  MousePointer,
+  Layers,
 } from 'lucide-react'
 
 const FIELD_TYPES = [
-  { value: 'TEXT', label: 'Short Text', icon: Type, description: 'Single line text input' },
-  { value: 'TEXTAREA', label: 'Long Text', icon: FileText, description: 'Multi-line text area' },
-  { value: 'EMAIL', label: 'Email', icon: Mail, description: 'Email address with validation' },
-  { value: 'PHONE', label: 'Phone', icon: Phone, description: 'Phone number input' },
-  { value: 'NUMBER', label: 'Number', icon: Hash, description: 'Numeric input' },
-  { value: 'DATE', label: 'Date', icon: Calendar, description: 'Date picker' },
-  { value: 'SELECT', label: 'Dropdown', icon: List, description: 'Single selection dropdown' },
+  {
+    value: 'TEXT',
+    label: 'Short Text',
+    icon: Type,
+    description: 'Single line text input',
+    category: 'Basic',
+  },
+  {
+    value: 'TEXTAREA',
+    label: 'Long Text',
+    icon: FileText,
+    description: 'Multi-line text area',
+    category: 'Basic',
+  },
+  {
+    value: 'EMAIL',
+    label: 'Email',
+    icon: Mail,
+    description: 'Email address with validation',
+    category: 'Basic',
+  },
+  {
+    value: 'PHONE',
+    label: 'Phone',
+    icon: Phone,
+    description: 'Phone number input',
+    category: 'Basic',
+  },
+  { value: 'NUMBER', label: 'Number', icon: Hash, description: 'Numeric input', category: 'Basic' },
+  { value: 'DATE', label: 'Date', icon: Calendar, description: 'Date picker', category: 'Basic' },
+  {
+    value: 'SELECT',
+    label: 'Dropdown',
+    icon: List,
+    description: 'Single selection dropdown',
+    category: 'Choice',
+  },
   {
     value: 'RADIO',
     label: 'Radio Buttons',
     icon: CheckSquare,
     description: 'Single choice from options',
+    category: 'Choice',
   },
-  { value: 'CHECKBOX', label: 'Checkboxes', icon: CheckSquare, description: 'Multiple selections' },
-  { value: 'BOOLEAN', label: 'Yes/No', icon: CheckSquare, description: 'Single checkbox' },
-  { value: 'FILE_UPLOAD', label: 'File Upload', icon: Upload, description: 'Single file upload' },
+  {
+    value: 'CHECKBOX',
+    label: 'Checkboxes',
+    icon: CheckSquare,
+    description: 'Multiple selections',
+    category: 'Choice',
+  },
+  {
+    value: 'BOOLEAN',
+    label: 'Yes/No',
+    icon: CheckSquare,
+    description: 'Single checkbox',
+    category: 'Choice',
+  },
+  {
+    value: 'FILE_UPLOAD',
+    label: 'File Upload',
+    icon: Upload,
+    description: 'Single file upload',
+    category: 'Advanced',
+  },
   {
     value: 'MULTI_FILE',
     label: 'Multiple Files',
     icon: Upload,
     description: 'Multiple file uploads',
+    category: 'Advanced',
   },
-  { value: 'RATING', label: 'Rating', icon: Star, description: 'Star rating or numeric rating' },
-  { value: 'URL', label: 'Website URL', icon: Type, description: 'URL with validation' },
-  { value: 'SECTION_HEADER', label: 'Section Header', icon: Type, description: 'Section divider' },
+  {
+    value: 'RATING',
+    label: 'Rating',
+    icon: Star,
+    description: 'Star rating or numeric rating',
+    category: 'Advanced',
+  },
+  {
+    value: 'URL',
+    label: 'Website URL',
+    icon: Type,
+    description: 'URL with validation',
+    category: 'Advanced',
+  },
+  {
+    value: 'SECTION_HEADER',
+    label: 'Section Header',
+    icon: Layers,
+    description: 'Section divider',
+    category: 'Layout',
+  },
 ]
+
+const FIELD_CATEGORIES = ['Basic', 'Choice', 'Advanced', 'Layout']
 
 export function FormBuilder({ initialFields = [], onFieldsChange, isPreview = false }) {
   const [fields, setFields] = useState(initialFields)
   const [selectedField, setSelectedField] = useState(null)
   const [showFieldTypes, setShowFieldTypes] = useState(false)
+  const [activeCategory, setActiveCategory] = useState('Basic')
 
   // Handle drag and drop reordering
   const handleDragEnd = useCallback(
@@ -141,7 +217,6 @@ export function FormBuilder({ initialFields = [], onFieldsChange, isPreview = fa
       )
       setFields(updatedFields)
       onFieldsChange?.(updatedFields)
-
       if (selectedField?.id === fieldId) {
         setSelectedField({ ...selectedField, ...updates })
       }
@@ -155,7 +230,6 @@ export function FormBuilder({ initialFields = [], onFieldsChange, isPreview = fa
       const updatedFields = fields.filter(field => field.id !== fieldId)
       setFields(updatedFields)
       onFieldsChange?.(updatedFields)
-
       if (selectedField?.id === fieldId) {
         setSelectedField(null)
       }
@@ -172,7 +246,6 @@ export function FormBuilder({ initialFields = [], onFieldsChange, isPreview = fa
         label: `${field.label} (Copy)`,
         order: fields.length,
       }
-
       const updatedFields = [...fields, duplicatedField]
       setFields(updatedFields)
       onFieldsChange?.(updatedFields)
@@ -184,191 +257,290 @@ export function FormBuilder({ initialFields = [], onFieldsChange, isPreview = fa
     return <FormPreview fields={fields} />
   }
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full">
-      {/* Field Types Panel */}
-      <div className="lg:col-span-1">
-        <Card className="starboard-card h-full">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center">
-              <Plus className="mr-2 h-5 w-5" />
-              Add Fields
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {FIELD_TYPES.map(fieldType => {
-              const Icon = fieldType.icon
-              return (
-                <button
-                  key={fieldType.value}
-                  onClick={() => addField(fieldType)}
-                  className="w-full p-3 text-left border border-neutral-200 rounded-lg hover:bg-snow-100 hover:border-primary/50 transition-colors group"
-                >
-                  <div className="flex items-start space-x-3">
-                    <Icon className="h-5 w-5 text-slate-gray-500 group-hover:text-primary flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-charcoal-800 group-hover:text-primary">
-                        {fieldType.label}
-                      </p>
-                      <p className="text-xs text-slate-gray-500 mt-1">{fieldType.description}</p>
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </CardContent>
-        </Card>
-      </div>
+  const categorizedFields = FIELD_CATEGORIES.reduce((acc, category) => {
+    acc[category] = FIELD_TYPES.filter(field => field.category === category)
+    return acc
+  }, {})
 
-      {/* Form Builder */}
-      <div className="lg:col-span-2">
-        <Card className="starboard-card h-full">
-          <CardHeader>
+  return (
+    <TooltipProvider>
+      <div className="flex h-screen bg-gray-50">
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Header */}
+          <div className="bg-white border-b px-6 py-4">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Form Builder</CardTitle>
-              <Badge variant="outline">{fields.length} fields</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {fields.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-snow-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Plus className="h-8 w-8 text-slate-gray-400" />
-                </div>
-                <p className="text-slate-gray-600 mb-2">No fields added yet</p>
-                <p className="text-sm text-slate-gray-500">
-                  Add fields from the panel on the left to start building your form
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Form Builder</h1>
+                <p className="text-sm text-gray-500 mt-1">
+                  Drag and drop fields to build your form
                 </p>
               </div>
-            ) : (
-              <DragDropContext onDragEnd={handleDragEnd}>
-                <Droppable droppableId="form-fields">
-                  {provided => (
-                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
-                      {fields.map((field, index) => (
-                        <Draggable key={field.id} draggableId={field.id} index={index}>
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              className={`p-4 border border-neutral-200 rounded-lg bg-white hover:shadow-soft transition-shadow ${
-                                selectedField?.id === field.id
-                                  ? 'ring-2 ring-primary/50 border-primary'
-                                  : ''
-                              } ${snapshot.isDragging ? 'shadow-soft-lg' : ''}`}
-                            >
-                              <div className="flex items-start space-x-3">
-                                <div
-                                  {...provided.dragHandleProps}
-                                  className="p-1 text-slate-gray-400 hover:text-slate-gray-600 cursor-grab"
-                                >
-                                  <GripVertical className="h-4 w-4" />
+              <div className="flex items-center space-x-3">
+                <Badge variant="secondary" className="px-3 py-1">
+                  {fields.length} {fields.length === 1 ? 'field' : 'fields'}
+                </Badge>
+                <Sheet open={showFieldTypes} onOpenChange={setShowFieldTypes}>
+                  <SheetTrigger asChild>
+                    <Button>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Field
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-80">
+                    <SheetHeader>
+                      <SheetTitle>Add Field</SheetTitle>
+                      <SheetDescription>Choose a field type to add to your form</SheetDescription>
+                    </SheetHeader>
+                    <div className="mt-6">
+                      {/* Category Tabs */}
+                      <div className="flex space-x-1 mb-4">
+                        {FIELD_CATEGORIES.map(category => (
+                          <button
+                            key={category}
+                            onClick={() => setActiveCategory(category)}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                              activeCategory === category
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            {category}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Field Types */}
+                      <ScrollArea className="h-[calc(100vh-200px)]">
+                        <div className="space-y-2">
+                          {categorizedFields[activeCategory]?.map(fieldType => {
+                            const Icon = fieldType.icon
+                            return (
+                              <button
+                                key={fieldType.value}
+                                onClick={() => addField(fieldType)}
+                                className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all group"
+                              >
+                                <div className="flex items-start space-x-3">
+                                  <div className="p-2 bg-gray-100 rounded-md group-hover:bg-blue-100 transition-colors">
+                                    <Icon className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900 group-hover:text-blue-700">
+                                      {fieldType.label}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {fieldType.description}
+                                    </p>
+                                  </div>
                                 </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </div>
+            </div>
+          </div>
 
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center space-x-2">
-                                      <h4 className="font-medium text-charcoal-800">
-                                        {field.label}
-                                      </h4>
-                                      <Badge variant="secondary" className="text-xs">
-                                        {field.type}
-                                      </Badge>
-                                      {field.required && (
-                                        <Badge variant="destructive" className="text-xs">
-                                          Required
-                                        </Badge>
-                                      )}
-                                    </div>
+          {/* Form Builder Area */}
+          <div className="flex-1 p-6">
+            <div className="max-w-4xl mx-auto">
+              {fields.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <MousePointer className="h-10 w-10 text-gray-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    Start building your form
+                  </h3>
+                  <p className="text-gray-500 mb-6 max-w-md mx-auto">
+                    Add fields by clicking the "Add Field" button above. You can drag and drop to
+                    reorder them.
+                  </p>
+                  <Button onClick={() => setShowFieldTypes(true)} size="lg">
+                    <Plus className="mr-2 h-5 w-5" />
+                    Add Your First Field
+                  </Button>
+                </div>
+              ) : (
+                <Card className="bg-white shadow-sm">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg font-semibold">Form Preview</CardTitle>
+                      <div className="text-sm text-gray-500">
+                        Drag fields to reorder • Click to edit
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <DragDropContext onDragEnd={handleDragEnd}>
+                      <Droppable droppableId="form-fields">
+                        {(provided, snapshot) => (
+                          <div
+                            {...provided.droppableProps}
+                            ref={provided.innerRef}
+                            className={`space-y-4 min-h-[200px] ${
+                              snapshot.isDraggingOver ? 'bg-blue-50 rounded-lg' : ''
+                            }`}
+                          >
+                            {fields.map((field, index) => (
+                              <Draggable key={field.id} draggableId={field.id} index={index}>
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    className={`group relative ${snapshot.isDragging ? 'z-50' : ''}`}
+                                  >
+                                    <div
+                                      className={`p-4 border-2 rounded-lg bg-white transition-all ${
+                                        selectedField?.id === field.id
+                                          ? 'border-blue-500 shadow-md'
+                                          : 'border-gray-200 hover:border-gray-300'
+                                      } ${snapshot.isDragging ? 'shadow-lg rotate-2 scale-105' : 'hover:shadow-sm'}`}
+                                      onClick={() => setSelectedField(field)}
+                                    >
+                                      {/* Field Header */}
+                                      <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center space-x-3">
+                                          <div
+                                            {...provided.dragHandleProps}
+                                            className="p-1 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing"
+                                          >
+                                            <GripVertical className="h-4 w-4" />
+                                          </div>
+                                          <div>
+                                            <div className="flex items-center space-x-2">
+                                              <h4 className="font-medium text-gray-900">
+                                                {field.label}
+                                              </h4>
+                                              <Badge variant="outline" className="text-xs">
+                                                {field.type}
+                                              </Badge>
+                                              {field.required && (
+                                                <Badge variant="destructive" className="text-xs">
+                                                  Required
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            {field.description && (
+                                              <p className="text-sm text-gray-500 mt-1">
+                                                {field.description}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
 
-                                    <div className="flex items-center space-x-1">
-                                      <button
-                                        onClick={() =>
-                                          updateField(field.id, { isVisible: !field.isVisible })
-                                        }
-                                        className="p-1 text-slate-gray-400 hover:text-slate-gray-600"
-                                      >
-                                        {field.isVisible ? (
-                                          <Eye className="h-4 w-4" />
-                                        ) : (
-                                          <EyeOff className="h-4 w-4" />
-                                        )}
-                                      </button>
-                                      <button
-                                        onClick={() => duplicateField(field)}
-                                        className="p-1 text-slate-gray-400 hover:text-slate-gray-600"
-                                      >
-                                        <Copy className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        onClick={() => setSelectedField(field)}
-                                        className="p-1 text-slate-gray-400 hover:text-primary"
-                                      >
-                                        <Settings className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        onClick={() => deleteField(field.id)}
-                                        className="p-1 text-red-400 hover:text-red-600"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </button>
+                                        {/* Field Actions */}
+                                        <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <button
+                                                onClick={e => {
+                                                  e.stopPropagation()
+                                                  updateField(field.id, {
+                                                    isVisible: !field.isVisible,
+                                                  })
+                                                }}
+                                                className="p-1.5 text-gray-400 hover:text-gray-600 rounded"
+                                              >
+                                                {field.isVisible ? (
+                                                  <Eye className="h-4 w-4" />
+                                                ) : (
+                                                  <EyeOff className="h-4 w-4" />
+                                                )}
+                                              </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              {field.isVisible ? 'Hide field' : 'Show field'}
+                                            </TooltipContent>
+                                          </Tooltip>
+
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <button
+                                                onClick={e => {
+                                                  e.stopPropagation()
+                                                  duplicateField(field)
+                                                }}
+                                                className="p-1.5 text-gray-400 hover:text-gray-600 rounded"
+                                              >
+                                                <Copy className="h-4 w-4" />
+                                              </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Duplicate field</TooltipContent>
+                                          </Tooltip>
+
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <button
+                                                onClick={e => {
+                                                  e.stopPropagation()
+                                                  deleteField(field.id)
+                                                }}
+                                                className="p-1.5 text-red-400 hover:text-red-600 rounded"
+                                              >
+                                                <Trash2 className="h-4 w-4" />
+                                              </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Delete field</TooltipContent>
+                                          </Tooltip>
+                                        </div>
+                                      </div>
+
+                                      {/* Field Preview */}
+                                      <div className={field.isVisible ? '' : 'opacity-50'}>
+                                        <FieldPreview field={field} />
+                                      </div>
                                     </div>
                                   </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </DragDropContext>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </div>
 
-                                  {field.description && (
-                                    <p className="text-sm text-slate-gray-600 mb-2">
-                                      {field.description}
-                                    </p>
-                                  )}
-
-                                  <FieldPreview field={field} />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </DragDropContext>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Field Settings Panel */}
-      <div className="lg:col-span-1">
-        <Card className="starboard-card h-full">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center">
-              <Settings className="mr-2 h-5 w-5" />
-              Field Settings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selectedField ? (
+        {/* Settings Sidebar */}
+        {selectedField && (
+          <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+            <div className="p-6 border-b">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Field Settings</h3>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedField(null)}>
+                  ×
+                </Button>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">Configure the selected field</p>
+            </div>
+            <ScrollArea className="flex-1 p-6">
               <FieldSettings
                 field={selectedField}
                 onUpdate={updates => updateField(selectedField.id, updates)}
               />
-            ) : (
-              <div className="text-center py-8">
-                <Settings className="h-12 w-12 text-slate-gray-300 mx-auto mb-3" />
-                <p className="text-slate-gray-600 text-sm">Select a field to edit its settings</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </ScrollArea>
+          </div>
+        )}
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
 
-// Field preview component
+// Enhanced Field Preview Component
 function FieldPreview({ field }) {
-  const baseClasses = 'w-full px-3 py-2 border border-neutral-300 rounded-md text-sm'
+  const baseClasses =
+    'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
 
   switch (field.type) {
     case 'TEXT':
@@ -376,119 +548,197 @@ function FieldPreview({ field }) {
     case 'PHONE':
     case 'URL':
       return (
-        <input
-          type="text"
-          placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
-          className={baseClasses}
-          disabled
-        />
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <input
+            type="text"
+            placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+            className={baseClasses}
+            disabled
+          />
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
+        </div>
       )
 
     case 'TEXTAREA':
       return (
-        <textarea
-          placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
-          rows={3}
-          className={baseClasses}
-          disabled
-        />
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <textarea
+            placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+            rows={3}
+            className={baseClasses}
+            disabled
+          />
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
+        </div>
       )
 
     case 'NUMBER':
       return (
-        <input
-          type="number"
-          placeholder={field.placeholder || '0'}
-          className={baseClasses}
-          disabled
-        />
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <input
+            type="number"
+            placeholder={field.placeholder || '0'}
+            className={baseClasses}
+            disabled
+          />
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
+        </div>
       )
 
     case 'DATE':
-      return <input type="date" className={baseClasses} disabled />
+      return (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <input type="date" className={baseClasses} disabled />
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
+        </div>
+      )
 
     case 'SELECT':
       return (
-        <select className={baseClasses} disabled>
-          <option>Select an option...</option>
-          {field.options?.map((option, index) => (
-            <option key={index} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <select className={baseClasses} disabled>
+            <option>Select an option...</option>
+            {field.options?.map((option, index) => (
+              <option key={index} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
+        </div>
       )
 
     case 'RADIO':
       return (
-        <div className="space-y-2">
-          {field.options?.map((option, index) => (
-            <label key={index} className="flex items-center space-x-2">
-              <input type="radio" name={field.id} disabled />
-              <span className="text-sm">{option.label}</span>
-            </label>
-          ))}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <div className="space-y-2">
+            {field.options?.map((option, index) => (
+              <label key={index} className="flex items-center space-x-2 cursor-pointer">
+                <input type="radio" name={field.id} disabled className="text-blue-600" />
+                <span className="text-sm text-gray-700">{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
         </div>
       )
 
     case 'CHECKBOX':
       return (
-        <div className="space-y-2">
-          {field.options?.map((option, index) => (
-            <label key={index} className="flex items-center space-x-2">
-              <input type="checkbox" disabled />
-              <span className="text-sm">{option.label}</span>
-            </label>
-          ))}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <div className="space-y-2">
+            {field.options?.map((option, index) => (
+              <label key={index} className="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" disabled className="text-blue-600 rounded" />
+                <span className="text-sm text-gray-700">{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
         </div>
       )
 
     case 'BOOLEAN':
       return (
-        <label className="flex items-center space-x-2">
-          <input type="checkbox" disabled />
-          <span className="text-sm">{field.label}</span>
-        </label>
+        <div className="space-y-2">
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox" disabled className="text-blue-600 rounded" />
+            <span className="text-sm font-medium text-gray-700">
+              {field.label}
+              {field.required && <span className="text-red-500 ml-1">*</span>}
+            </span>
+          </label>
+          {field.description && <p className="text-xs text-gray-500 ml-6">{field.description}</p>}
+        </div>
       )
 
     case 'FILE_UPLOAD':
     case 'MULTI_FILE':
       return (
-        <div className="border-2 border-dashed border-neutral-300 rounded-lg p-4 text-center">
-          <Upload className="h-6 w-6 text-slate-gray-400 mx-auto mb-2" />
-          <p className="text-sm text-slate-gray-600">Drop files here or click to upload</p>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-600 mb-1">Drop files here or click to upload</p>
+            <p className="text-xs text-gray-500">
+              {field.type === 'MULTI_FILE' ? `Up to ${field.maxFiles || 5} files` : 'Single file'}
+              {field.maxFileSize && ` • Max ${field.maxFileSize}MB`}
+            </p>
+          </div>
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
         </div>
       )
 
     case 'RATING':
       return (
-        <div className="flex items-center space-x-1">
-          {Array.from({ length: field.maxValue || 5 }).map((_, index) => (
-            <Star key={index} className="h-5 w-5 text-slate-gray-300" />
-          ))}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <div className="flex items-center space-x-1">
+            {Array.from({ length: field.maxValue || 5 }).map((_, index) => (
+              <Star
+                key={index}
+                className="h-6 w-6 text-gray-300 hover:text-yellow-400 cursor-pointer transition-colors"
+              />
+            ))}
+          </div>
+          {field.description && <p className="text-xs text-gray-500">{field.description}</p>}
         </div>
       )
 
     case 'SECTION_HEADER':
       return (
-        <div className="border-b border-neutral-200 pb-2">
-          <h3 className="text-lg font-semibold text-charcoal-800">{field.label}</h3>
-          {field.description && (
-            <p className="text-sm text-slate-gray-600 mt-1">{field.description}</p>
-          )}
+        <div className="py-4">
+          <div className="border-b border-gray-200 pb-3">
+            <h3 className="text-xl font-semibold text-gray-900">{field.label}</h3>
+            {field.description && <p className="text-sm text-gray-600 mt-2">{field.description}</p>}
+          </div>
         </div>
       )
 
     default:
       return (
-        <div className="p-4 bg-slate-gray-50 rounded-lg text-center">
-          <p className="text-sm text-slate-gray-600">Field preview not available</p>
+        <div className="p-6 bg-gray-50 rounded-lg text-center border-2 border-dashed border-gray-300">
+          <p className="text-sm text-gray-500">Field preview not available</p>
         </div>
       )
   }
 }
 
-// Field settings component
+// Enhanced Field Settings Component
 function FieldSettings({ field, onUpdate }) {
   const handleOptionChange = (index, key, value) => {
     const updatedOptions = [...(field.options || [])]
@@ -512,169 +762,292 @@ function FieldSettings({ field, onUpdate }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Basic Settings */}
-      <div>
-        <Label htmlFor="label">Label *</Label>
-        <Input
-          id="label"
-          value={field.label}
-          onChange={e => onUpdate({ label: e.target.value })}
-          className="starboard-input"
-        />
-      </div>
+      <div className="space-y-4">
+        <h4 className="font-medium text-gray-900 flex items-center">
+          <Settings className="mr-2 h-4 w-4" />
+          Basic Settings
+        </h4>
 
-      <div>
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          value={field.description || ''}
-          onChange={e => onUpdate({ description: e.target.value })}
-          className="starboard-input"
-          rows={2}
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="placeholder">Placeholder</Label>
-        <Input
-          id="placeholder"
-          value={field.placeholder || ''}
-          onChange={e => onUpdate({ placeholder: e.target.value })}
-          className="starboard-input"
-        />
-      </div>
-
-      {/* Required Toggle */}
-      <div className="flex items-center justify-between">
-        <Label htmlFor="required">Required Field</Label>
-        <Switch
-          id="required"
-          checked={field.required}
-          onCheckedChange={checked => onUpdate({ required: checked })}
-        />
-      </div>
-
-      {/* Section Grouping */}
-      <div>
-        <Label htmlFor="section">Section (optional)</Label>
-        <Input
-          id="section"
-          value={field.section || ''}
-          onChange={e => onUpdate({ section: e.target.value })}
-          className="starboard-input"
-          placeholder="Group related fields"
-        />
-      </div>
-
-      {/* Type-specific settings */}
-      {(field.type === 'TEXT' || field.type === 'TEXTAREA') && (
-        <>
+        <div className="space-y-3">
           <div>
-            <Label htmlFor="maxLength">Max Length</Label>
+            <Label htmlFor="label" className="text-sm font-medium">
+              Field Label *
+            </Label>
+            <Input
+              id="label"
+              value={field.label}
+              onChange={e => onUpdate({ label: e.target.value })}
+              className="mt-1"
+              placeholder="Enter field label"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="description" className="text-sm font-medium">
+              Description
+            </Label>
+            <Textarea
+              id="description"
+              value={field.description || ''}
+              onChange={e => onUpdate({ description: e.target.value })}
+              className="mt-1"
+              rows={2}
+              placeholder="Optional help text for users"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="placeholder" className="text-sm font-medium">
+              Placeholder Text
+            </Label>
+            <Input
+              id="placeholder"
+              value={field.placeholder || ''}
+              onChange={e => onUpdate({ placeholder: e.target.value })}
+              className="mt-1"
+              placeholder="Placeholder text..."
+            />
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Validation Settings */}
+      <div className="space-y-4">
+        <h4 className="font-medium text-gray-900">Validation</h4>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm font-medium">Required Field</Label>
+            <p className="text-xs text-gray-500">Users must fill this field</p>
+          </div>
+          <Switch
+            checked={field.required}
+            onCheckedChange={checked => onUpdate({ required: checked })}
+          />
+        </div>
+
+        {/* Type-specific validation */}
+        {(field.type === 'TEXT' || field.type === 'TEXTAREA') && (
+          <div>
+            <Label htmlFor="maxLength" className="text-sm font-medium">
+              Maximum Length
+            </Label>
             <Input
               id="maxLength"
               type="number"
               value={field.maxLength || ''}
-              onChange={e => onUpdate({ maxLength: parseInt(e.target.value) || null })}
-              className="starboard-input"
+              onChange={e => onUpdate({ maxLength: Number.parseInt(e.target.value) || null })}
+              className="mt-1"
+              placeholder="No limit"
             />
           </div>
-        </>
-      )}
+        )}
 
-      {field.type === 'NUMBER' && (
-        <>
-          <div>
-            <Label htmlFor="minValue">Min Value</Label>
-            <Input
-              id="minValue"
-              type="number"
-              value={field.minValue || ''}
-              onChange={e => onUpdate({ minValue: parseFloat(e.target.value) || null })}
-              className="starboard-input"
-            />
-          </div>
-          <div>
-            <Label htmlFor="maxValue">Max Value</Label>
-            <Input
-              id="maxValue"
-              type="number"
-              value={field.maxValue || ''}
-              onChange={e => onUpdate({ maxValue: parseFloat(e.target.value) || null })}
-              className="starboard-input"
-            />
-          </div>
-        </>
-      )}
-
-      {(field.type === 'SELECT' || field.type === 'RADIO' || field.type === 'CHECKBOX') && (
-        <div>
-          <Label>Options</Label>
-          <div className="space-y-2 mt-2">
-            {(field.options || []).map((option, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <Input
-                  value={option.label}
-                  onChange={e => handleOptionChange(index, 'label', e.target.value)}
-                  className="starboard-input flex-1"
-                  placeholder="Option label"
-                />
-                <button
-                  onClick={() => removeOption(index)}
-                  className="p-2 text-red-400 hover:text-red-600"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            <Button onClick={addOption} variant="outline" size="sm" className="w-full">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Option
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {(field.type === 'FILE_UPLOAD' || field.type === 'MULTI_FILE') && (
-        <>
-          <div>
-            <Label htmlFor="maxFileSize">Max File Size (MB)</Label>
-            <Input
-              id="maxFileSize"
-              type="number"
-              value={field.maxFileSize || ''}
-              onChange={e => onUpdate({ maxFileSize: parseInt(e.target.value) || null })}
-              className="starboard-input"
-            />
-          </div>
-          {field.type === 'MULTI_FILE' && (
+        {field.type === 'NUMBER' && (
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="maxFiles">Max Files</Label>
+              <Label htmlFor="minValue" className="text-sm font-medium">
+                Min Value
+              </Label>
               <Input
-                id="maxFiles"
+                id="minValue"
                 type="number"
-                value={field.maxFiles || ''}
-                onChange={e => onUpdate({ maxFiles: parseInt(e.target.value) || null })}
-                className="starboard-input"
+                value={field.minValue || ''}
+                onChange={e => onUpdate({ minValue: Number.parseFloat(e.target.value) || null })}
+                className="mt-1"
               />
             </div>
-          )}
+            <div>
+              <Label htmlFor="maxValue" className="text-sm font-medium">
+                Max Value
+              </Label>
+              <Input
+                id="maxValue"
+                type="number"
+                value={field.maxValue || ''}
+                onChange={e => onUpdate({ maxValue: Number.parseFloat(e.target.value) || null })}
+                className="mt-1"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Options for choice fields */}
+      {(field.type === 'SELECT' || field.type === 'RADIO' || field.type === 'CHECKBOX') && (
+        <>
+          <Separator />
+          <div className="space-y-4">
+            <h4 className="font-medium text-gray-900">Options</h4>
+            <div className="space-y-3">
+              {(field.options || []).map((option, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <Input
+                    value={option.label}
+                    onChange={e => handleOptionChange(index, 'label', e.target.value)}
+                    placeholder={`Option ${index + 1}`}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={() => removeOption(index)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                onClick={addOption}
+                variant="outline"
+                size="sm"
+                className="w-full bg-transparent"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Option
+              </Button>
+            </div>
+          </div>
         </>
       )}
+
+      {/* File upload settings */}
+      {(field.type === 'FILE_UPLOAD' || field.type === 'MULTI_FILE') && (
+        <>
+          <Separator />
+          <div className="space-y-4">
+            <h4 className="font-medium text-gray-900">File Settings</h4>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="maxFileSize" className="text-sm font-medium">
+                  Max File Size (MB)
+                </Label>
+                <Input
+                  id="maxFileSize"
+                  type="number"
+                  value={field.maxFileSize || ''}
+                  onChange={e => onUpdate({ maxFileSize: Number.parseInt(e.target.value) || null })}
+                  className="mt-1"
+                  placeholder="10"
+                />
+              </div>
+              {field.type === 'MULTI_FILE' && (
+                <div>
+                  <Label htmlFor="maxFiles" className="text-sm font-medium">
+                    Max Number of Files
+                  </Label>
+                  <Input
+                    id="maxFiles"
+                    type="number"
+                    value={field.maxFiles || ''}
+                    onChange={e => onUpdate({ maxFiles: Number.parseInt(e.target.value) || null })}
+                    className="mt-1"
+                    placeholder="5"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Rating settings */}
+      {field.type === 'RATING' && (
+        <>
+          <Separator />
+          <div className="space-y-4">
+            <h4 className="font-medium text-gray-900">Rating Settings</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="minValue" className="text-sm font-medium">
+                  Min Rating
+                </Label>
+                <Input
+                  id="minValue"
+                  type="number"
+                  value={field.minValue || 1}
+                  onChange={e => onUpdate({ minValue: Number.parseInt(e.target.value) || 1 })}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="maxValue" className="text-sm font-medium">
+                  Max Rating
+                </Label>
+                <Input
+                  id="maxValue"
+                  type="number"
+                  value={field.maxValue || 5}
+                  onChange={e => onUpdate({ maxValue: Number.parseInt(e.target.value) || 5 })}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      <Separator />
+
+      {/* Organization */}
+      <div className="space-y-4">
+        <h4 className="font-medium text-gray-900">Organization</h4>
+        <div>
+          <Label htmlFor="section" className="text-sm font-medium">
+            Section Group
+          </Label>
+          <Input
+            id="section"
+            value={field.section || ''}
+            onChange={e => onUpdate({ section: e.target.value })}
+            className="mt-1"
+            placeholder="Group related fields together"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Fields with the same section name will be grouped together
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
 
-// Form preview component
+// Form Preview Component
 function FormPreview({ fields }) {
   return (
-    <div className="space-y-6">
-      {fields.map(field => (
-        <div key={field.id}>
-          <FieldPreview field={field} />
+    <div className="max-w-2xl mx-auto p-6 space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Form Preview</h2>
+        <p className="text-gray-600">This is how your form will appear to users</p>
+      </div>
+
+      {fields.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No fields to preview</p>
         </div>
-      ))}
+      ) : (
+        <Card className="p-6">
+          <form className="space-y-6">
+            {fields
+              .filter(field => field.isVisible)
+              .map(field => (
+                <div key={field.id}>
+                  <FieldPreview field={field} />
+                </div>
+              ))}
+            <div className="pt-4">
+              <Button type="submit" className="w-full">
+                Submit Form
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
     </div>
   )
 }

@@ -20,20 +20,13 @@ export const applicationService = {
             orderBy: { order: 'asc' },
           },
           workspace: true,
-          creator: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
         },
       })
     } catch (error) {
       throw handleDatabaseError(error)
     }
   },
+
   async findSubmissionByEmail(applicationId, email) {
     try {
       return await prisma.applicationSubmission.findFirst({
@@ -66,6 +59,7 @@ export const applicationService = {
       throw handleDatabaseError(error)
     }
   },
+
   async incrementSubmissionCount(applicationId) {
     await prisma.application.update({
       where: { id: applicationId },
@@ -76,6 +70,7 @@ export const applicationService = {
       },
     })
   },
+
   async findById(id) {
     try {
       return await prisma.application.findUnique({
@@ -124,6 +119,48 @@ export const applicationService = {
         include: {
           formFields: {
             orderBy: { order: 'asc' },
+          },
+          creator: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          _count: {
+            select: {
+              submissions: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      })
+    } catch (error) {
+      throw handleDatabaseError(error)
+    }
+  },
+
+  async findByWorkspaces(workspaceIds, options = {}) {
+    try {
+      const { includeInactive = false, page = 1, limit = 50 } = options
+
+      return await prisma.application.findMany({
+        where: {
+          workspaceId: { in: workspaceIds },
+          ...(includeInactive ? {} : { isActive: true }),
+        },
+        include: {
+          formFields: {
+            orderBy: { order: 'asc' },
+          },
+          workspace: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
           creator: {
             select: {
@@ -556,6 +593,107 @@ export const applicationService = {
           return acc
         }, {}),
         submissionsByDate: await this.getSubmissionsByDate(applicationId),
+      }
+    } catch (error) {
+      throw handleDatabaseError(error)
+    }
+  },
+
+  async getWorkspaceStats(workspaceIds) {
+    try {
+      const now = new Date()
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+      const [
+        totalApplications,
+        activeApplications,
+        totalSubmissions,
+        pendingReviews,
+        thisWeekSubmissions,
+        reviewedSubmissions,
+      ] = await Promise.all([
+        // Total applications
+        prisma.application.count({
+          where: { workspaceId: { in: workspaceIds } },
+        }),
+
+        // Active applications
+        prisma.application.count({
+          where: {
+            workspaceId: { in: workspaceIds },
+            isActive: true,
+            OR: [{ closeDate: null }, { closeDate: { gte: now } }],
+          },
+        }),
+
+        // Total submissions
+        prisma.applicationSubmission.count({
+          where: {
+            application: { workspaceId: { in: workspaceIds } },
+          },
+        }),
+
+        // Pending reviews
+        prisma.applicationSubmission.count({
+          where: {
+            application: { workspaceId: { in: workspaceIds } },
+            status: 'SUBMITTED',
+            reviewedAt: null,
+          },
+        }),
+
+        // This week submissions
+        prisma.applicationSubmission.count({
+          where: {
+            application: { workspaceId: { in: workspaceIds } },
+            submittedAt: { gte: oneWeekAgo },
+          },
+        }),
+
+        // Reviewed submissions
+        prisma.applicationSubmission.findMany({
+          where: {
+            application: { workspaceId: { in: workspaceIds } },
+            status: { in: ['ACCEPTED', 'REJECTED'] },
+            reviewedAt: { not: null },
+          },
+          select: {
+            status: true,
+            reviewedAt: true,
+            submittedAt: true,
+          },
+        }),
+      ])
+
+      // Calculate acceptance rate
+      const acceptedSubmissions = reviewedSubmissions.filter(s => s.status === 'ACCEPTED').length
+      const acceptanceRate =
+        reviewedSubmissions.length > 0
+          ? Math.round((acceptedSubmissions / reviewedSubmissions.length) * 100 * 10) / 10
+          : 0
+
+      // Calculate average review time
+      let avgReviewTime = 0
+      if (reviewedSubmissions.length > 0) {
+        const totalReviewTime = reviewedSubmissions.reduce((sum, submission) => {
+          if (submission.submittedAt && submission.reviewedAt) {
+            const reviewTime = new Date(submission.reviewedAt) - new Date(submission.submittedAt)
+            return sum + reviewTime / (1000 * 60 * 60 * 24)
+          }
+          return sum
+        }, 0)
+
+        avgReviewTime = Math.round((totalReviewTime / reviewedSubmissions.length) * 10) / 10
+      }
+
+      return {
+        totalApplications,
+        activeApplications,
+        totalSubmissions,
+        pendingReviews,
+        acceptanceRate,
+        thisWeekSubmissions,
+        avgReviewTime,
       }
     } catch (error) {
       throw handleDatabaseError(error)

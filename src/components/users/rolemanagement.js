@@ -186,18 +186,6 @@ export default function RoleManagement() {
     })
   }
 
-  const validateMentorshipCapabilities = () => {
-    // Optional: You might want to warn if a role has permissions for mentorship
-    // but doesn't have the capabilities enabled
-    const hasMentorshipPermissions = roleForm.permissions.some(
-      permission => permission.includes('mentorship') || permission.includes('mentor')
-    )
-
-    if (hasMentorshipPermissions && !roleForm.canMentor && !roleForm.canBeMentee) {
-      toast.warning('This role has mentorship permissions but no mentorship capabilities enabled')
-    }
-  }
-
   const handleCreateRole = async () => {
     if (!roleForm.name.trim()) {
       toast.error('Role name is required')
@@ -208,8 +196,6 @@ export default function RoleManagement() {
       toast.error('At least one permission is required')
       return
     }
-
-    validateMentorshipCapabilities()
 
     setIsSaving(true)
     try {
@@ -255,8 +241,6 @@ export default function RoleManagement() {
       toast.error('Role name is required')
       return
     }
-
-    validateMentorshipCapabilities()
 
     setIsSaving(true)
     try {

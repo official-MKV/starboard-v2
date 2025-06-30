@@ -81,7 +81,6 @@ export async function PUT(request, { params }) {
 
     const { roleId } = params
 
-    // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
       return NextResponse.json(
@@ -90,7 +89,6 @@ export async function PUT(request, { params }) {
       )
     }
 
-    // Check permissions
     const hasPermission = await WorkspaceContext.hasPermission(
       session.user.id,
       workspaceContext.workspaceId,
@@ -104,7 +102,6 @@ export async function PUT(request, { params }) {
       )
     }
 
-    // Verify role exists and belongs to current workspace
     const existingRole = await RoleService.findById(roleId)
     if (!existingRole) {
       return NextResponse.json({ error: { message: 'Role not found' } }, { status: 404 })
@@ -135,13 +132,6 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Role name is required' } }, { status: 400 })
     }
 
-    if (permissions && (!Array.isArray(permissions) || permissions.length === 0)) {
-      return NextResponse.json(
-        { error: { message: 'At least one permission is required' } },
-        { status: 400 }
-      )
-    }
-
     const updates = {
       name: name.trim(),
       description: description?.trim() || null,
@@ -159,7 +149,6 @@ export async function PUT(request, { params }) {
         canBeMentee !== undefined ? Boolean(canBeMentee) : existingRole.canBeMentee || false,
     }
 
-    // Update the role
     const updatedRole = await RoleService.update(roleId, updates)
 
     logger.info('Role updated', {
