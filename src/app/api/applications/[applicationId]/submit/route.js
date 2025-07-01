@@ -113,10 +113,7 @@ export async function POST(request, { params }) {
     const submissionData = {
       applicationId,
       applicantEmail: data.applicantEmail.toLowerCase().trim(),
-      applicantFirstName: data.applicantFirstName.trim(),
-      applicantLastName: data.applicantLastName.trim(),
-      applicantPhone: data.applicantPhone?.trim() || null,
-      companyName: data.companyName?.trim() || null,
+
       userId,
       responses: data.responses,
       attachments: data.attachments || [],

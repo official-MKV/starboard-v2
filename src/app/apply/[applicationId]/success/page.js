@@ -78,49 +78,6 @@ export default function ApplicationSuccessPage() {
               </div>
             </div>
 
-            {/* Next Steps */}
-            <div className="text-left">
-              <h3 className="font-semibold text-charcoal-800 mb-3">What happens next?</h3>
-              <div className="space-y-3">
-                <div className="flex items-start space-x-3">
-                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Mail className="h-3 w-3 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-charcoal-800">Email Confirmation</p>
-                    <p className="text-sm text-slate-gray-600">
-                      You'll receive a confirmation email shortly with your application details.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Calendar className="h-3 w-3 text-yellow-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-charcoal-800">Application Review</p>
-                    <p className="text-sm text-slate-gray-600">
-                      Our team will carefully review your application. This typically takes 2-3
-                      weeks.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <CheckCircle className="h-3 w-3 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-charcoal-800">Decision Notification</p>
-                    <p className="text-sm text-slate-gray-600">
-                      We'll email you with our decision and next steps if you're selected.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <Link href="/" className="flex-1">
@@ -129,27 +86,6 @@ export default function ApplicationSuccessPage() {
                   Go Home
                 </Button>
               </Link>
-
-              <Button variant="outline" onClick={handleShare} className="flex-1">
-                <Share2 className="mr-2 h-4 w-4" />
-                Share
-              </Button>
-
-              <Button variant="outline" onClick={() => window.print()} className="flex-1">
-                <Download className="mr-2 h-4 w-4" />
-                Print
-              </Button>
-            </div>
-
-            {/* Important Notes */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
-              <h4 className="font-medium text-blue-800 mb-2">Important Notes:</h4>
-              <ul className="text-sm text-blue-700 space-y-1">
-                <li>• Please save your confirmation number for your records</li>
-                <li>• Check your email (including spam folder) for confirmation</li>
-                <li>• You can contact us if you don't hear back within 3 weeks</li>
-                <li>• Additional documents may be requested during the review process</li>
-              </ul>
             </div>
 
             {/* Contact Information */}

@@ -144,9 +144,7 @@ export default function PublicApplicationPage() {
           `Application submitted successfully! Confirmation email sent to ${applicantEmail}`
         )
         // Redirect to success page
-        router.push(
-          `/apply/${applicationId}/success?confirmation=${result.submission.confirmationNumber}`
-        )
+        router.push(`/apply/${applicationId}/success?confirmation=CONFIRMED}`)
       } else {
         if (result.code === 'FORM_VALIDATION_ERROR') {
           toast.error('Please check your form responses')
