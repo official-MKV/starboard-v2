@@ -145,6 +145,11 @@ export default function EditApplicationPage({ params }) {
         closeDate: applicationData.closeDate
           ? new Date(applicationData.closeDate).toISOString()
           : null,
+        // Convert empty strings to null for numeric fields
+        maxSubmissions:
+          applicationData.maxSubmissions === ''
+            ? null
+            : parseInt(applicationData.maxSubmissions, 10) || null,
       }
 
       const response = await fetch(`/api/applications/${applicationId}`, {

@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { DynamicFormRenderer } from '@/components/applications/dynamic-form-renderer'
 import {
   Calendar,
@@ -17,6 +19,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ExternalLink,
+  Mail,
 } from 'lucide-react'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 import Link from 'next/link'
@@ -30,7 +33,13 @@ export default function PublicApplicationPage() {
   const [application, setApplication] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formValues, setFormValues] = useState({})
+  const [formValues, setFormValues] = useState({
+    applicantEmail: '',
+    applicantFirstName: '',
+    applicantLastName: '',
+    applicantPhone: '',
+    companyName: '',
+  })
   const [existingSubmission, setExistingSubmission] = useState(null)
   const [error, setError] = useState(null)
 
@@ -44,14 +53,16 @@ export default function PublicApplicationPage() {
           setApplication(result.data.application)
 
           console.log(result)
+          // Pre-fill with session data but keep it editable
           if (session?.user) {
-            setFormValues({
-              applicantEmail: session.user.email,
-              applicantFirstName: session.user.firstName,
-              applicantLastName: session.user.lastName,
+            setFormValues(prev => ({
+              ...prev,
+              applicantEmail: session.user.email || '',
+              applicantFirstName: session.user.firstName || '',
+              applicantLastName: session.user.lastName || '',
               applicantPhone: session.user.phone || '',
               companyName: session.user.company || '',
-            })
+            }))
           }
         } else if (response.status === 404) {
           setError('Application not found')
@@ -94,19 +105,54 @@ export default function PublicApplicationPage() {
   }, [applicationId, session])
 
   const handleFormValueChange = values => {
-    setFormValues(values)
+    setFormValues(prev => ({ ...prev, ...values }))
+  }
+
+  const handlePersonalInfoChange = (field, value) => {
+    setFormValues(prev => ({
+      ...prev,
+      [field]: value,
+    }))
+  }
+
+  const validatePersonalInfo = () => {
+    const errors = []
+
+    if (!formValues.applicantEmail || !formValues.applicantEmail.trim()) {
+      errors.push('Email address is required')
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formValues.applicantEmail)) {
+      errors.push('Please enter a valid email address')
+    }
+
+    if (!formValues.applicantFirstName || !formValues.applicantFirstName.trim()) {
+      errors.push('First name is required')
+    }
+
+    if (!formValues.applicantLastName || !formValues.applicantLastName.trim()) {
+      errors.push('Last name is required')
+    }
+
+    return errors
   }
 
   const handleSubmit = async responses => {
     setIsSubmitting(true)
 
     try {
+      // Validate personal info first
+      const validationErrors = validatePersonalInfo()
+      if (validationErrors.length > 0) {
+        toast.error(validationErrors[0])
+        setIsSubmitting(false)
+        return
+      }
+
       const payload = {
-        applicantEmail: formValues.applicantEmail || session?.user?.email,
-        applicantFirstName: formValues.applicantFirstName || session?.user?.firstName,
-        applicantLastName: formValues.applicantLastName || session?.user?.lastName,
-        applicantPhone: formValues.applicantPhone,
-        companyName: formValues.companyName,
+        applicantEmail: formValues.applicantEmail.trim(),
+        applicantFirstName: formValues.applicantFirstName.trim(),
+        applicantLastName: formValues.applicantLastName.trim(),
+        applicantPhone: formValues.applicantPhone?.trim() || '',
+        companyName: formValues.companyName?.trim() || '',
         responses,
       }
 
@@ -121,7 +167,9 @@ export default function PublicApplicationPage() {
       const result = await response.json()
 
       if (response.ok) {
-        toast.success('Application submitted successfully!')
+        toast.success(
+          `Application submitted successfully! Confirmation email sent to ${formValues.applicantEmail}`
+        )
 
         // Redirect to success page
         router.push(
@@ -302,24 +350,110 @@ export default function PublicApplicationPage() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="starboard-card">
-            <CardHeader>
-              <CardTitle>Apply Now</CardTitle>
-              <CardDescription>
-                Complete the form below to submit your application. Fields marked with * are
-                required.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <DynamicFormRenderer
-                fields={application.formFields}
-                initialValues={formValues}
-                onValueChange={handleFormValueChange}
-                onSubmit={handleSubmit}
-                isSubmitting={isSubmitting}
-              />
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            {/* Personal Information Card - VISIBLE TO USER */}
+            <Card className="starboard-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="h-5 w-5" />
+                  Your Information
+                </CardTitle>
+                <CardDescription>
+                  Please provide your contact information. A confirmation email will be sent to the
+                  email address below.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="applicantEmail">Email Address *</Label>
+                    <Input
+                      id="applicantEmail"
+                      type="email"
+                      value={formValues.applicantEmail}
+                      onChange={e => handlePersonalInfoChange('applicantEmail', e.target.value)}
+                      placeholder="your.email@example.com"
+                      className="mt-1"
+                      required
+                    />
+                    <p className="text-xs text-slate-gray-500 mt-1">
+                      Confirmation email will be sent here
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="applicantPhone">Phone Number</Label>
+                    <Input
+                      id="applicantPhone"
+                      type="tel"
+                      value={formValues.applicantPhone}
+                      onChange={e => handlePersonalInfoChange('applicantPhone', e.target.value)}
+                      placeholder="+1 (555) 123-4567"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="applicantFirstName">First Name *</Label>
+                    <Input
+                      id="applicantFirstName"
+                      type="text"
+                      value={formValues.applicantFirstName}
+                      onChange={e => handlePersonalInfoChange('applicantFirstName', e.target.value)}
+                      placeholder="John"
+                      className="mt-1"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="applicantLastName">Last Name *</Label>
+                    <Input
+                      id="applicantLastName"
+                      type="text"
+                      value={formValues.applicantLastName}
+                      onChange={e => handlePersonalInfoChange('applicantLastName', e.target.value)}
+                      placeholder="Doe"
+                      className="mt-1"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="companyName">Company/Organization</Label>
+                  <Input
+                    id="companyName"
+                    type="text"
+                    value={formValues.companyName}
+                    onChange={e => handlePersonalInfoChange('companyName', e.target.value)}
+                    placeholder="Acme Corporation"
+                    className="mt-1"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Application Form */}
+            <Card className="starboard-card">
+              <CardHeader>
+                <CardTitle>Application Form</CardTitle>
+                <CardDescription>
+                  Complete the form below to submit your application. Fields marked with * are
+                  required.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DynamicFormRenderer
+                  fields={application.formFields}
+                  initialValues={{}}
+                  onValueChange={handleFormValueChange}
+                  onSubmit={handleSubmit}
+                  isSubmitting={isSubmitting}
+                />
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Application Details */}

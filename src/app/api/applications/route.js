@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
 import { applicationService } from '@/lib/services/application'
-import { validateRequest, apiResponse, apiError, handleApiError } from '@/lib/api-utils'
 import { logger, createRequestTimer } from '@/lib/logger'
 import { z } from 'zod'
 
@@ -120,7 +119,10 @@ export async function GET(request) {
   } catch (error) {
     logger.apiError('GET', '/api/applications', error, session?.user?.id)
     timer.log('GET', '/api/applications', 500, session?.user?.id)
-    return handleApiError(error)
+    return NextResponse.json(
+      { error: { message: error.message || 'Failed to fetch applications' } },
+      { status: 500 }
+    )
   }
 }
 
@@ -207,6 +209,20 @@ export async function POST(request) {
     // Add workspace ID from context instead of request body
     data.workspaceId = workspaceContext.workspaceId
 
+    // Handle form fields separately if provided
+    const formFields = data.formFields
+    delete data.formFields // Remove from main data to avoid issues
+
+    // Sanitize numeric fields - convert empty strings to null
+    if (data.maxSubmissions === '' || data.maxSubmissions === undefined) {
+      data.maxSubmissions = null
+    } else if (data.maxSubmissions) {
+      data.maxSubmissions = parseInt(data.maxSubmissions, 10)
+      if (isNaN(data.maxSubmissions)) {
+        data.maxSubmissions = null
+      }
+    }
+
     // Convert date strings to Date objects if provided
     if (data.openDate) {
       try {
@@ -262,10 +278,13 @@ export async function POST(request) {
       userId: session.user.id,
       workspaceId: data.workspaceId,
       title: data.title,
-      formFieldsCount: data.formFields?.length || 0,
+      formFieldsCount: formFields?.length || 0,
     })
 
-    const application = await applicationService.create(data)
+    const application = await applicationService.create({
+      ...data,
+      formFields: formFields || [],
+    })
 
     logger.info('Application created successfully', {
       userId: session.user.id,
@@ -276,10 +295,13 @@ export async function POST(request) {
 
     timer.log('POST', '/api/applications', 201, session.user.id)
 
-    return apiResponse({ application }, 201)
+    return NextResponse.json({ application }, { status: 201 })
   } catch (error) {
     logger.apiError('POST', '/api/applications', error, session?.user?.id, requestBody)
     timer.log('POST', '/api/applications', 500, session?.user?.id)
-    return handleApiError(error)
+    return NextResponse.json(
+      { error: { message: error.message || 'Failed to create application' } },
+      { status: 500 }
+    )
   }
 }
