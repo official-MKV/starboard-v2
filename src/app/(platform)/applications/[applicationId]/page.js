@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
-
+import { DynamicFormRenderer } from '@/components/applications/dynamic-form-renderer'
 export default function ApplicationDetailPage({ params }) {
   const { applicationId } = params
   const [application, setApplication] = useState(null)
