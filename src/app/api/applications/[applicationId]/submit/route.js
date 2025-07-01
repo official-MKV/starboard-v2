@@ -4,6 +4,8 @@ import { applicationService } from '@/lib/services/application'
 import { validateRequest, apiResponse, apiError, handleApiError } from '@/lib/api-utils'
 import { logger, createRequestTimer } from '@/lib/logger'
 import { generateId } from '@/lib/utils'
+import { EmailService } from '@/lib/services/email-service' // Add this import
+import { EmailTemplateService } from '@/lib/services/email-template-service' // Add this import
 import { z } from 'zod'
 
 const submitApplicationSchema = z.object({
@@ -128,14 +130,67 @@ export async function POST(request, { params }) {
     // Update submission count
     await applicationService.incrementSubmissionCount(applicationId)
 
-    logger.authEvent('application_submitted', userId || 'anonymous', {
-      applicationId,
-      submissionId: submission.id,
-      applicantEmail: data.applicantEmail,
-    })
+    // ✅ NEW: Send confirmation email to applicant
+    try {
+      await sendConfirmationEmail({
+        application,
+        submission,
+        applicantData: {
+          email: data.applicantEmail,
+          firstName: data.applicantFirstName,
+          lastName: data.applicantLastName,
+        },
+      })
 
-    // TODO: Send confirmation email to applicant
-    // TODO: Send notification to application admin
+      logger.info('Confirmation email sent successfully', {
+        applicationId,
+        submissionId: submission.id,
+        applicantEmail: data.applicantEmail,
+      })
+    } catch (emailError) {
+      // Log email error but don't fail the submission
+      logger.error('Failed to send confirmation email', {
+        applicationId,
+        submissionId: submission.id,
+        applicantEmail: data.applicantEmail,
+        error: emailError.message,
+      })
+    }
+
+    try {
+      await EmailService.sendEmail({
+        to: data.applicantEmail,
+        subject: `Application Received - ${application.title}`,
+        html: EmailService.formatEmailContent(
+          `
+    Hello ${data.applicantFirstName},
+
+    Thank you for submitting your application for **${application.title}**.
+
+    **Application Details:**
+    - Confirmation Number: **${submission.id.slice(-8).toUpperCase()}**
+    - Submitted: ${new Date().toLocaleDateString()}
+    - Status: Under Review
+
+    We have received your application and will review it carefully. You will receive an update on the status of your application soon.
+
+    If you have any questions, please contact our support team.
+
+    Best regards,
+    ${application.workspace?.name || 'The Team'}
+        `,
+          {
+            workspace_name: application.workspace?.name || 'Our Team',
+            workspace_logo: application.workspace?.logo,
+          }
+        ),
+      })
+
+      console.log('✅ Confirmation email sent successfully')
+    } catch (emailError) {
+      // Log error but don't fail the submission
+      console.error('❌ Failed to send confirmation email:', emailError.message)
+    }
 
     timer.log('POST', `/api/applications/${applicationId}/submit`, 201)
 
@@ -158,7 +213,81 @@ export async function POST(request, { params }) {
   }
 }
 
-// Get submission status for a specific applicant
+// ✅ NEW: Function to send confirmation email
+async function sendConfirmationEmail({ application, submission, applicantData }) {
+  try {
+    // Try to find an APPLICATION_RECEIVED template first
+    let template
+    try {
+      template = await EmailTemplateService.findByWorkspace(application.workspaceId, {
+        type: 'APPLICATION_RECEIVED',
+        isActive: true,
+      })
+      template = template?.[0] // Get first active template
+    } catch (error) {
+      logger.warn('No APPLICATION_RECEIVED template found, using default', {
+        workspaceId: application.workspaceId,
+        error: error.message,
+      })
+    }
+
+    // Use template if found, otherwise use default content
+    if (template) {
+      // Use the template
+      const variables = {
+        first_name: applicantData.firstName,
+        last_name: applicantData.lastName,
+        application_title: application.title,
+        confirmation_number: submission.id.slice(-8).toUpperCase(),
+        submission_date: new Date().toLocaleDateString(),
+        workspace_name: application.workspace?.name || 'Our Team',
+        status_link: `${process.env.NEXT_PUBLIC_BASE_URL}/apply/${application.id}/status?email=${encodeURIComponent(applicantData.email)}`,
+      }
+
+      await EmailTemplateService.sendTemplatedEmail(template, variables, applicantData.email)
+    } else {
+      // Use simple confirmation email
+      const confirmationTemplate = {
+        subject: `Application Received - ${application.title}`,
+        content: `Hello ${applicantData.firstName},
+
+Thank you for submitting your application for **${application.title}**.
+
+**Application Details:**
+- Confirmation Number: **${submission.id.slice(-8).toUpperCase()}**
+- Submitted: ${new Date().toLocaleDateString()}
+- Status: Under Review
+
+We have received your application and will review it carefully. You will receive an update on the status of your application soon.
+
+If you have any questions, please contact our support team.
+
+Best regards,
+${application.workspace?.name || 'The Team'}`,
+        requiredVariables: [],
+        optionalVariables: [],
+      }
+
+      await EmailService.sendTemplatedEmail(
+        confirmationTemplate,
+        {
+          workspace_name: application.workspace?.name || 'Our Team',
+          workspace_logo: application.workspace?.logo,
+        },
+        applicantData.email
+      )
+    }
+  } catch (error) {
+    logger.error('Error in sendConfirmationEmail', {
+      error: error.message,
+      applicantEmail: applicantData.email,
+      applicationId: application.id,
+    })
+    throw error
+  }
+}
+
+// Get submission status for a specific applicant (unchanged)
 export async function GET(request, { params }) {
   const timer = createRequestTimer()
   const { applicationId } = params
