@@ -5,10 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Upload, Star, Calendar, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
+import { Upload, Star, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 
 export function DynamicFormRenderer({
   fields = [],
@@ -77,7 +74,7 @@ export function DynamicFormRenderer({
         break
 
       case 'PHONE':
-        if (!/^\+?[\d\s\-\(\)]+$/.test(value)) {
+        if (!/^\+?[\d\s\-$$$$]+$/.test(value)) {
           return 'Please enter a valid phone number'
         }
         break
@@ -91,7 +88,7 @@ export function DynamicFormRenderer({
         break
 
       case 'NUMBER':
-        const num = parseFloat(value)
+        const num = Number.parseFloat(value)
         if (isNaN(num)) {
           return 'Please enter a valid number'
         }
@@ -117,9 +114,34 @@ export function DynamicFormRenderer({
     return null
   }
 
+  // Check if form is valid for submission
+  const isFormValid = () => {
+    // Check if all required fields have values
+    for (const field of fields) {
+      const value = formValues[field.id]
+
+      // Check required fields
+      if (
+        field.required &&
+        (!value || value === '' || (Array.isArray(value) && value.length === 0))
+      ) {
+        return false
+      }
+
+      // Check field validation for non-empty values
+      if (value && value !== '') {
+        const error = validateFieldValue(field, value)
+        if (error) {
+          return false
+        }
+      }
+    }
+
+    return true
+  }
+
   const handleSubmit = e => {
     e.preventDefault()
-
     if (validateForm()) {
       onSubmit?.(formValues)
     }
@@ -501,7 +523,7 @@ export function DynamicFormRenderer({
                 >
                   <Star
                     className={`h-6 w-6 ${
-                      index < (parseInt(value) || 0)
+                      index < (Number.parseInt(value) || 0)
                         ? 'text-yellow-400 fill-current'
                         : 'text-slate-gray-300'
                     }`}
@@ -540,7 +562,6 @@ export function DynamicFormRenderer({
               <div className="w-12 h-0.5 bg-primary"></div>
             </div>
           )}
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {sectionFields
               .filter(field => field.isVisible !== false)
@@ -552,7 +573,11 @@ export function DynamicFormRenderer({
 
       {onSubmit && (
         <div className="flex justify-end pt-6 border-t border-neutral-200">
-          <Button type="submit" disabled={isSubmitting} className="starboard-button min-w-32">
+          <Button
+            type="submit"
+            disabled={isSubmitting || !isFormValid()}
+            className="starboard-button min-w-32"
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
