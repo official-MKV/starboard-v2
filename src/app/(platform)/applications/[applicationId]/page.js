@@ -1,398 +1,610 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
-import { toast } from 'sonner'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DashboardNav } from '@/components/dashboard/nav'
+import { Badge } from '@/components/ui/badge'
 import { DashboardHeader } from '@/components/dashboard/header'
-import { FormBuilder } from '@/components/applications/form-builder'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  Save,
-  Eye,
-  Settings,
-  FileText,
-  Calendar,
-  Globe,
+  Edit,
   Users,
-  ArrowLeft,
+  BarChart3,
+  Settings,
+  Globe,
+  Calendar,
+  Clock,
+  FileText,
+  Eye,
+  Copy,
+  Share2,
+  Download,
   Loader2,
+  AlertCircle,
 } from 'lucide-react'
+import { formatDate, formatRelativeTime } from '@/lib/utils'
+import { toast } from 'sonner'
 
-export default function CreateApplicationPage() {
-  const { data: session } = useSession()
-  const router = useRouter()
+export default function ApplicationDetailPage({ params }) {
+  const { applicationId } = params
+  const [application, setApplication] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [activeTab, setActiveTab] = useState('overview')
 
-  const [activeTab, setActiveTab] = useState('basic')
-  const [isLoading, setIsLoading] = useState(false)
-  const [isPreview, setIsPreview] = useState(false)
+  useEffect(() => {
+    const fetchApplication = async () => {
+      try {
+        setIsLoading(true)
+        const response = await fetch(`/api/applications/${applicationId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
 
-  const [applicationData, setApplicationData] = useState({
-    title: '',
-    description: '',
-    isActive: true,
-    isPublic: true,
-    openDate: '',
-    closeDate: '',
-    maxSubmissions: '',
-    allowMultipleSubmissions: false,
-    requireAuthentication: false,
-    reviewerInstructions: '',
-    formFields: [],
-  })
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error?.message || 'Failed to fetch application')
+        }
 
-  const handleBasicInfoChange = (field, value) => {
-    setApplicationData(prev => ({
-      ...prev,
-      [field]: value,
-    }))
-  }
-
-  const handleFormFieldsChange = fields => {
-    setApplicationData(prev => ({
-      ...prev,
-      formFields: fields,
-    }))
-  }
-
-  const validateApplication = () => {
-    const errors = []
-
-    if (!applicationData.title.trim()) {
-      errors.push('Application title is required')
-    }
-
-    if (!applicationData.description.trim()) {
-      errors.push('Application description is required')
-    }
-
-    if (applicationData.formFields.length === 0) {
-      errors.push('At least one form field is required')
-    }
-
-    if (applicationData.openDate && applicationData.closeDate) {
-      const openDate = new Date(applicationData.openDate)
-      const closeDate = new Date(applicationData.closeDate)
-
-      if (closeDate <= openDate) {
-        errors.push('Close date must be after open date')
+        const data = await response.json()
+        setApplication(data.application)
+      } catch (err) {
+        console.error('Error fetching application:', err)
+        setError(err.message)
+      } finally {
+        setIsLoading(false)
       }
     }
 
-    return errors
-  }
+    if (applicationId) {
+      fetchApplication()
+    }
+  }, [applicationId])
 
-  const handleSave = async (publish = false) => {
-    const errors = validateApplication()
+  const getStatusBadge = () => {
+    if (!application) return null
 
-    if (errors.length > 0) {
-      errors.forEach(error => toast.error(error))
-      return
+    const now = new Date()
+
+    if (!application.isActive) {
+      return <Badge variant="secondary">Inactive</Badge>
     }
 
-    setIsLoading(true)
+    if (application.closeDate && new Date(application.closeDate) <= now) {
+      return <Badge variant="destructive">Closed</Badge>
+    }
 
+    if (application.openDate && new Date(application.openDate) > now) {
+      return <Badge variant="warning">Scheduled</Badge>
+    }
+
+    return <Badge variant="success">Active</Badge>
+  }
+
+  const getPublicUrl = () => {
+    return `${window.location.origin}/apply/${applicationId}`
+  }
+
+  const handleCopyUrl = async () => {
     try {
-      const payload = {
-        ...applicationData,
-        isActive: publish ? true : applicationData.isActive,
-        // Removed workspaceId and createdBy - handled server-side now
-      }
+      await navigator.clipboard.writeText(getPublicUrl())
+      toast.success('URL copied to clipboard!')
+    } catch (err) {
+      toast.error('Failed to copy URL')
+    }
+  }
 
-      const response = await fetch('/api/applications', {
+  const handleDuplicateApplication = async () => {
+    try {
+      const response = await fetch(`/api/applications/${applicationId}/duplicate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
       })
 
-      if (response.ok) {
-        const result = await response.json()
-        toast.success(
-          publish ? 'Application published successfully!' : 'Application saved as draft!'
-        )
-        router.push(`/applications/${result.application.id}`)
-      } else {
-        const error = await response.json()
-        toast.error(error.message || 'Failed to save application')
+      if (!response.ok) {
+        throw new Error('Failed to duplicate application')
       }
-    } catch (error) {
-      console.error('Save application error:', error)
-      toast.error('An unexpected error occurred')
-    } finally {
-      setIsLoading(false)
+
+      const data = await response.json()
+      toast.success('Application duplicated successfully!')
+
+      // Navigate to the duplicated application
+      window.location.href = `/applications/${data.application.id}`
+    } catch (err) {
+      console.error('Error duplicating application:', err)
+      toast.error('Failed to duplicate application')
     }
   }
 
-  if (!session) {
-    return <div>Loading...</div>
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-snow-100">
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+            <p className="text-slate-gray-600">Loading application...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-snow-100">
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center">
+            <AlertCircle className="h-8 w-8 mx-auto mb-4 text-red-600" />
+            <p className="text-red-600 mb-2">Failed to load application</p>
+            <p className="text-sm text-slate-gray-500 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()} variant="outline">
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!application) {
+    return (
+      <div className="min-h-screen bg-snow-100">
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center">
+            <AlertCircle className="h-8 w-8 mx-auto mb-4 text-slate-gray-400" />
+            <p className="text-slate-gray-600 mb-2">Application not found</p>
+            <Link href="/applications">
+              <Button variant="outline">Back to Applications</Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-snow-100">
-      <DashboardNav user={session.user} />
-
       <div className="">
         <DashboardHeader
-          title="Create Application"
-          description="Build a new application form for your accelerator program"
+          title={application.title}
+          description={`Created by ${application.creator.firstName} ${
+            application.creator.lastName
+          } • ${formatRelativeTime(new Date(application.createdAt))}`}
           actions={
             <div className="flex items-center space-x-3">
-              <Button variant="outline" onClick={() => router.back()}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
-              </Button>
+              {application.isPublic && (
+                <Link href={getPublicUrl()} target="_blank">
+                  <Button variant="outline" size="sm">
+                    <Globe className="mr-2 h-4 w-4" />
+                    View Public
+                  </Button>
+                </Link>
+              )}
 
-              <Button variant="outline" onClick={() => setIsPreview(!isPreview)}>
-                <Eye className="mr-2 h-4 w-4" />
-                {isPreview ? 'Edit' : 'Preview'}
-              </Button>
+              <Link href={`/applications/${applicationId}/edit`}>
+                <Button variant="outline" size="sm">
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </Button>
+              </Link>
 
-              <Button variant="outline" onClick={() => handleSave(false)} disabled={isLoading}>
-                {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
-                )}
-                Save Draft
-              </Button>
-
-              <Button
-                onClick={() => handleSave(true)}
-                disabled={isLoading}
-                className="starboard-button"
-              >
-                {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Globe className="mr-2 h-4 w-4" />
-                )}
-                Publish
+              <Button className="starboard-button" size="sm">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
               </Button>
             </div>
           }
         />
 
         <main className="p-6">
-          {isPreview ? (
-            <Card className="starboard-card max-w-4xl mx-auto">
-              <CardHeader>
-                <CardTitle>{applicationData.title || 'Untitled Application'}</CardTitle>
-                <CardDescription>{applicationData.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FormBuilder
-                  initialFields={applicationData.formFields}
-                  onFieldsChange={handleFormFieldsChange}
-                  isPreview={true}
-                />
+          {/* Overview Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <Card className="starboard-card">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-charcoal-900">
+                      {application.stats.totalSubmissions}
+                    </p>
+                    <p className="text-sm text-slate-gray-600">Total Submissions</p>
+                  </div>
+                  <Users className="h-8 w-8 text-blue-500" />
+                </div>
               </CardContent>
             </Card>
-          ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="basic" className="flex items-center space-x-2">
-                  <FileText className="h-4 w-4" />
-                  <span>Basic Info</span>
-                </TabsTrigger>
-                <TabsTrigger value="form" className="flex items-center space-x-2">
-                  <Settings className="h-4 w-4" />
-                  <span>Form Builder</span>
-                </TabsTrigger>
-                <TabsTrigger value="settings" className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4" />
-                  <span>Settings</span>
-                </TabsTrigger>
-              </TabsList>
 
-              <TabsContent value="basic">
-                <Card className="starboard-card">
-                  <CardHeader>
-                    <CardTitle>Basic Information</CardTitle>
-                    <CardDescription>Set up the basic details for your application</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="grid grid-cols-1 gap-6">
+            <Card className="starboard-card">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-charcoal-900">
+                      {application.stats.pendingReviews}
+                    </p>
+                    <p className="text-sm text-slate-gray-600">Pending Reviews</p>
+                  </div>
+                  <Clock className="h-8 w-8 text-yellow-500" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="starboard-card">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-charcoal-900">
+                      {application.stats.accepted}
+                    </p>
+                    <p className="text-sm text-slate-gray-600">Accepted</p>
+                  </div>
+                  <Users className="h-8 w-8 text-green-500" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="starboard-card">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-charcoal-900">
+                      {application.stats.averageScore?.toFixed(1) || '0.0'}
+                    </p>
+                    <p className="text-sm text-slate-gray-600">Avg. Score</p>
+                  </div>
+                  <BarChart3 className="h-8 w-8 text-purple-500" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Main Content Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="submissions">Submissions</TabsTrigger>
+              <TabsTrigger value="form">Form Fields</TabsTrigger>
+              <TabsTrigger value="form-preview">Form Preview</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Application Details */}
+                <div className="lg:col-span-2 space-y-6">
+                  <Card className="starboard-card">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle>Application Details</CardTitle>
+                        {getStatusBadge()}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
                       <div>
-                        <Label htmlFor="title">Application Title *</Label>
-                        <Input
-                          id="title"
-                          value={applicationData.title}
-                          onChange={e => handleBasicInfoChange('title', e.target.value)}
-                          placeholder="e.g., Spring 2024 Accelerator Program"
-                          className="starboard-input"
-                        />
+                        <h4 className="font-medium text-charcoal-800 mb-2">Description</h4>
+                        <p className="text-slate-gray-600">{application.description}</p>
                       </div>
 
-                      <div>
-                        <Label htmlFor="description">Description *</Label>
-                        <Textarea
-                          id="description"
-                          value={applicationData.description}
-                          onChange={e => handleBasicInfoChange('description', e.target.value)}
-                          placeholder="Describe your accelerator program and what applicants can expect..."
-                          rows={4}
-                          className="starboard-input"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor="openDate">Application Open Date</Label>
-                          <Input
-                            id="openDate"
-                            type="datetime-local"
-                            value={applicationData.openDate}
-                            onChange={e => handleBasicInfoChange('openDate', e.target.value)}
-                            className="starboard-input"
-                          />
-                        </div>
-
-                        <div>
-                          <Label htmlFor="closeDate">Application Close Date</Label>
-                          <Input
-                            id="closeDate"
-                            type="datetime-local"
-                            value={applicationData.closeDate}
-                            onChange={e => handleBasicInfoChange('closeDate', e.target.value)}
-                            className="starboard-input"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 border border-neutral-200 rounded-lg">
-                        <div>
-                          <h4 className="font-medium text-charcoal-800">Public Application</h4>
+                          <h4 className="font-medium text-charcoal-800 mb-1">Opens</h4>
                           <p className="text-sm text-slate-gray-600">
-                            Allow anyone to discover and apply to this program
+                            {application.openDate
+                              ? formatDate(new Date(application.openDate))
+                              : 'Immediately'}
                           </p>
                         </div>
-                        <Switch
-                          checked={applicationData.isPublic}
-                          onCheckedChange={checked => handleBasicInfoChange('isPublic', checked)}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 border border-neutral-200 rounded-lg">
                         <div>
-                          <h4 className="font-medium text-charcoal-800">Active Application</h4>
+                          <h4 className="font-medium text-charcoal-800 mb-1">Closes</h4>
                           <p className="text-sm text-slate-gray-600">
-                            Accept new applications for this program
+                            {application.closeDate
+                              ? formatDate(new Date(application.closeDate))
+                              : 'No deadline'}
                           </p>
                         </div>
-                        <Switch
-                          checked={applicationData.isActive}
-                          onCheckedChange={checked => handleBasicInfoChange('isActive', checked)}
-                        />
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
 
-              <TabsContent value="form">
-                <Card className="starboard-card">
-                  <CardHeader>
-                    <CardTitle>Form Builder</CardTitle>
-                    <CardDescription>
-                      Design your application form by adding and configuring fields
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <FormBuilder
-                      initialFields={applicationData.formFields}
-                      onFieldsChange={handleFormFieldsChange}
-                    />
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                      {application.reviewerInstructions && (
+                        <div>
+                          <h4 className="font-medium text-charcoal-800 mb-2">
+                            Reviewer Instructions
+                          </h4>
+                          <p className="text-sm text-slate-gray-600 bg-slate-gray-50 p-3 rounded-lg">
+                            {application.reviewerInstructions}
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
-              <TabsContent value="settings">
-                <Card className="starboard-card">
-                  <CardHeader>
-                    <CardTitle>Application Settings</CardTitle>
-                    <CardDescription>
-                      Configure submission limits and review settings
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
+                  {/* Quick Actions */}
+                  <Card className="starboard-card">
+                    <CardHeader>
+                      <CardTitle>Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Link href={`/applications/${applicationId}/submissions`}>
+                          <Button variant="outline" className="w-full justify-start">
+                            <Users className="mr-2 h-4 w-4" />
+                            Review Submissions
+                          </Button>
+                        </Link>
+
+                        <Link href={`/applications/${applicationId}/analytics`}>
+                          <Button variant="outline" className="w-full justify-start">
+                            <BarChart3 className="mr-2 h-4 w-4" />
+                            View Analytics
+                          </Button>
+                        </Link>
+
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                          onClick={handleDuplicateApplication}
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Duplicate Application
+                        </Button>
+
+                        <Button variant="outline" className="w-full justify-start">
+                          <Download className="mr-2 h-4 w-4" />
+                          Export Data
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Sidebar */}
+                <div className="space-y-6">
+                  {/* Settings */}
+                  <Card className="starboard-card">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Settings</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Public Application</span>
+                        <Badge variant={application.isPublic ? 'success' : 'secondary'}>
+                          {application.isPublic ? 'Yes' : 'No'}
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Multiple Submissions</span>
+                        <Badge
+                          variant={application.allowMultipleSubmissions ? 'success' : 'secondary'}
+                        >
+                          {application.allowMultipleSubmissions ? 'Allowed' : 'Not Allowed'}
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Authentication Required</span>
+                        <Badge
+                          variant={application.requireAuthentication ? 'warning' : 'secondary'}
+                        >
+                          {application.requireAuthentication ? 'Yes' : 'No'}
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Submission Limit</span>
+                        <span className="text-sm text-slate-gray-600">
+                          {application.maxSubmissions || 'No limit'}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Share */}
+                  {application.isPublic && (
+                    <Card className="starboard-card">
+                      <CardHeader>
+                        <CardTitle className="text-lg">Share Application</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <label className="text-sm font-medium text-slate-gray-700">
+                            Public URL
+                          </label>
+                          <div className="flex mt-1">
+                            <input
+                              type="text"
+                              value={getPublicUrl()}
+                              readOnly
+                              className="flex-1 px-3 py-2 text-sm border border-neutral-300 rounded-l-md bg-slate-gray-50"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-l-none"
+                              onClick={handleCopyUrl}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <Button variant="outline" size="sm" className="w-full">
+                          <Share2 className="mr-2 h-4 w-4" />
+                          Share Link
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="submissions">
+              <Card className="starboard-card">
+                <CardContent className="pt-6">
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-slate-gray-300 mx-auto mb-4" />
+                    <p className="text-slate-gray-600">Submissions component would go here</p>
+                    <Link href={`/applications/${applicationId}/submissions`}>
+                      <Button className="mt-4 starboard-button">View All Submissions</Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="form">
+              <Card className="starboard-card">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="maxSubmissions">Maximum Submissions</Label>
-                      <Input
-                        id="maxSubmissions"
-                        type="number"
-                        value={applicationData.maxSubmissions}
-                        onChange={e => handleBasicInfoChange('maxSubmissions', e.target.value)}
-                        placeholder="Leave empty for unlimited"
-                        className="starboard-input"
-                      />
-                      <p className="text-sm text-slate-gray-500 mt-1">
-                        Set a limit on total number of submissions (optional)
-                      </p>
+                      <CardTitle>Form Fields ({application.formFields?.length || 0})</CardTitle>
+                      <CardDescription>
+                        The fields that applicants will see when applying
+                      </CardDescription>
                     </div>
 
-                    <div className="flex items-center justify-between p-4 border border-neutral-200 rounded-lg">
-                      <div>
-                        <h4 className="font-medium text-charcoal-800">
-                          Allow Multiple Submissions
-                        </h4>
-                        <p className="text-sm text-slate-gray-600">
-                          Allow applicants to submit multiple applications
-                        </p>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setActiveTab('form-preview')}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview Form
+                      </Button>
+                      <Link href={`/applications/${applicationId}/edit`}>
+                        <Button size="sm">
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit Form
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent>
+                  <div className="space-y-4">
+                    {application.formFields?.length > 0 ? (
+                      application.formFields.map((field, index) => (
+                        <div key={field.id} className="border border-neutral-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium text-charcoal-800">{field.label}</h4>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant="outline">{field.type}</Badge>
+                              {field.required && (
+                                <Badge variant="destructive" className="text-xs">
+                                  Required
+                                </Badge>
+                              )}
+                              {!field.isVisible && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Hidden
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          {field.description && (
+                            <p className="text-sm text-slate-gray-600">{field.description}</p>
+                          )}
+                          {field.options && field.options.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-xs text-slate-gray-500 mb-1">Options:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {field.options.map((option, i) => (
+                                  <Badge key={i} variant="outline" className="text-xs">
+                                    {option.label}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <FileText className="h-12 w-12 text-slate-gray-300 mx-auto mb-4" />
+                        <p className="text-slate-gray-600 mb-4">No form fields configured</p>
+                        <Link href={`/applications/${applicationId}/edit`}>
+                          <Button className="starboard-button">
+                            <Edit className="mr-2 h-4 w-4" />
+                            Add Form Fields
+                          </Button>
+                        </Link>
                       </div>
-                      <Switch
-                        checked={applicationData.allowMultipleSubmissions}
-                        onCheckedChange={checked =>
-                          handleBasicInfoChange('allowMultipleSubmissions', checked)
-                        }
-                      />
-                    </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-                    <div className="flex items-center justify-between p-4 border border-neutral-200 rounded-lg">
-                      <div>
-                        <h4 className="font-medium text-charcoal-800">Require Authentication</h4>
-                        <p className="text-sm text-slate-gray-600">
-                          Require applicants to create an account before applying
-                        </p>
-                      </div>
-                      <Switch
-                        checked={applicationData.requireAuthentication}
-                        onCheckedChange={checked =>
-                          handleBasicInfoChange('requireAuthentication', checked)
-                        }
-                      />
-                    </div>
-
+            <TabsContent value="form-preview">
+              <Card className="starboard-card">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="reviewerInstructions">Reviewer Instructions</Label>
-                      <Textarea
-                        id="reviewerInstructions"
-                        value={applicationData.reviewerInstructions}
-                        onChange={e =>
-                          handleBasicInfoChange('reviewerInstructions', e.target.value)
-                        }
-                        placeholder="Provide guidance for reviewers on how to evaluate applications..."
-                        rows={4}
-                        className="starboard-input"
-                      />
-                      <p className="text-sm text-slate-gray-500 mt-1">
-                        These instructions will be shown to reviewers when they evaluate
-                        applications
-                      </p>
+                      <CardTitle>Form Preview</CardTitle>
+                      <CardDescription>
+                        This is how your form will appear to applicants
+                      </CardDescription>
                     </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          )}
+                    <Button variant="outline" size="sm" onClick={() => setActiveTab('form')}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit Form
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {application.formFields?.length > 0 ? (
+                    <div className="max-w-2xl mx-auto">
+                      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center">
+                          <Eye className="h-5 w-5 text-blue-600 mr-2" />
+                          <div>
+                            <h4 className="font-medium text-blue-900">Preview Mode</h4>
+                            <p className="text-sm text-blue-700">
+                              This form is read-only. Applicants will see this layout when applying.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <DynamicFormRenderer
+                        fields={application.formFields.filter(field => field.isVisible !== false)}
+                        initialValues={{}}
+                        showRequiredIndicator={true}
+                        // Don't provide onSubmit to keep it read-only
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <FileText className="h-12 w-12 text-slate-gray-300 mx-auto mb-4" />
+                      <p className="text-slate-gray-600 mb-4">No form fields to preview</p>
+                      <Link href={`/applications/${applicationId}/edit`}>
+                        <Button className="starboard-button">
+                          <Edit className="mr-2 h-4 w-4" />
+                          Add Form Fields
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="analytics">
+              <Card className="starboard-card">
+                <CardContent className="pt-6">
+                  <div className="text-center py-8">
+                    <BarChart3 className="h-12 w-12 text-slate-gray-300 mx-auto mb-4" />
+                    <p className="text-slate-gray-600">Analytics component would go here</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </main>
       </div>
     </div>
