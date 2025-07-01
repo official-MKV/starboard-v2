@@ -91,9 +91,12 @@ export default function ApplicationSuccessPage() {
             {/* Contact Information */}
             <div className="border-t border-neutral-200 pt-4">
               <p className="text-sm text-slate-gray-600">
-                Questions about your application?{' '}
-                <Link href="/contact" className="text-primary hover:underline">
-                  Contact our support team
+                Questions about your application? Contact our support team
+                <Link
+                  href="mailto:support@mystarboard.ng?subject=Support Request&body=Hello, I need help with..."
+                  className="text-primary hover:underline"
+                >
+                  support@mystarboard.ng
                 </Link>
               </p>
             </div>
