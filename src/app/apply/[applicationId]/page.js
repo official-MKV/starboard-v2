@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -27,7 +26,6 @@ import Link from 'next/link'
 export default function PublicApplicationPage() {
   const params = useParams()
   const router = useRouter()
-  const { data: session } = useSession()
   const { applicationId } = params
 
   const [application, setApplication] = useState(null)
@@ -38,6 +36,24 @@ export default function PublicApplicationPage() {
   const [tempEmail, setTempEmail] = useState('')
   const [existingSubmission, setExistingSubmission] = useState(null)
   const [error, setError] = useState(null)
+
+  // Cookie helper functions
+  const setCookie = (name, value, days = 30) => {
+    const expires = new Date()
+    expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000)
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`
+  }
+
+  const getCookie = (name) => {
+    const nameEQ = name + '='
+    const ca = document.cookie.split(';')
+    for (let i = 0; i < ca.length; i++) {
+      let c = ca[i]
+      while (c.charAt(0) === ' ') c = c.substring(1, c.length)
+      if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length)
+    }
+    return null
+  }
 
   const isValidEmail = email => {
     return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
@@ -69,10 +85,12 @@ export default function PublicApplicationPage() {
     }
 
     const checkExistingSubmission = async () => {
-      if (session?.user?.email) {
+      // Only check if we have an email from cookies
+      const emailFromCookie = getCookie('email')
+      if (emailFromCookie && isValidEmail(emailFromCookie)) {
         try {
           const response = await fetch(
-            `/api/applications/${applicationId}/submit?email=${encodeURIComponent(session.user.email)}`
+            `/api/applications/${applicationId}/submit?email=${encodeURIComponent(emailFromCookie)}`
           )
           if (response.ok) {
             const result = await response.json()
@@ -88,14 +106,15 @@ export default function PublicApplicationPage() {
 
     fetchApplication()
     checkExistingSubmission()
-  }, [applicationId, session])
+  }, [applicationId])
 
   useEffect(() => {
-    // Set email from session when available
-    if (session?.user?.email) {
-      setApplicantEmail(session.user.email)
+    // Load email from cookies on component mount
+    const emailFromCookie = getCookie('email')
+    if (emailFromCookie && isValidEmail(emailFromCookie)) {
+      setApplicantEmail(emailFromCookie)
     }
-  }, [session])
+  }, [])
 
   const handleEmailEdit = () => {
     setTempEmail(applicantEmail)
@@ -104,8 +123,11 @@ export default function PublicApplicationPage() {
 
   const handleEmailSave = () => {
     if (isValidEmail(tempEmail)) {
-      setApplicantEmail(tempEmail.trim())
+      const trimmedEmail = tempEmail.trim()
+      setApplicantEmail(trimmedEmail)
+      setCookie('email', trimmedEmail)
       setIsEditingEmail(false)
+      toast.success('Email saved successfully')
     } else {
       toast.error('Please enter a valid email address')
     }
@@ -400,9 +422,22 @@ export default function PublicApplicationPage() {
                 <p className="text-slate-gray-600 mb-4">
                   Please provide a valid email address to continue with your application.
                 </p>
-                <Button onClick={handleEmailEdit} className="w-full">
-                  Enter Email Address
-                </Button>
+                <div className="space-y-4">
+                  <Input
+                    type="email"
+                    value={tempEmail}
+                    onChange={e => setTempEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                    className="w-full"
+                  />
+                  <Button 
+                    onClick={handleEmailSave} 
+                    className="w-full"
+                    disabled={!isValidEmail(tempEmail)}
+                  >
+                    Continue with Email
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
