@@ -70,12 +70,7 @@ const navigationItems = [
     icon: Users,
     permissions: [PERMISSIONS.USERS_VIEW, PERMISSIONS.USERS_MANAGE],
   },
-  {
-  name: 'Demo Days',
-  href: '/demo-days',
-  icon: Trophy,  
-  permissions: [PERMISSIONS.DEMO_DAY_PARTICIPATE, PERMISSIONS.DEMO_DAY_JUDGE, PERMISSIONS.DEMO_DAY_MANAGE],
-}
+ 
 ]
 
 // Skeleton components
