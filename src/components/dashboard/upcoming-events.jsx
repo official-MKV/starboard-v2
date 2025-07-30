@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { PermissionWrapper } from "@/components/permissionWrapper"
 import { usePermissions } from "@/lib/hooks/usePermissions"
 import { PERMISSIONS } from "@/lib/utils/permissions"
 import Link from "next/link"
@@ -88,12 +89,12 @@ export function UpcomingEvents({ userId }) {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Upcoming Events</h2>
-        {hasPermission(PERMISSIONS.EVENTS_CREATE) && (
+        <PermissionWrapper permission={PERMISSIONS.EVENTS_CREATE}>
           <Button>
             <Plus className="w-4 h-4 mr-2" />
             Schedule Event
           </Button>
-        )}
+        </PermissionWrapper>
       </div>
 
       {events.length === 0 ? (
@@ -102,12 +103,12 @@ export function UpcomingEvents({ userId }) {
             <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No upcoming events</h3>
             <p className="text-gray-600 mb-6">Schedule your first event to get started.</p>
-            {hasPermission(PERMISSIONS.EVENTS_CREATE) && (
+            <PermissionWrapper permission={PERMISSIONS.EVENTS_CREATE}>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
                 Schedule Event
               </Button>
-            )}
+            </PermissionWrapper>
           </CardContent>
         </Card>
       ) : (
@@ -172,14 +173,14 @@ export function UpcomingEvents({ userId }) {
                         View Event
                       </Link>
                     </Button>
-                    {hasPermission(PERMISSIONS.EVENTS_MANAGE) && (
+                    <PermissionWrapper permission={PERMISSIONS.EVENTS_MANAGE}>
                       <Button asChild variant="outline" size="sm" className="flex-1 bg-transparent">
                         <Link href={`/events/${event.id}/registrations`}>
                           <Settings className="w-4 h-4 mr-2" />
                           Manage
                         </Link>
                       </Button>
-                    )}
+                    </PermissionWrapper>
                   </div>
                 </CardContent>
               </Card>

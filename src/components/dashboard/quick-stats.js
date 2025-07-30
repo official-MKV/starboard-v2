@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, Calendar, Users, MessageCircle, FolderOpen, Loader2, TrendingUp, TrendingDown } from "lucide-react"
+import { PermissionWrapper } from "@/components/permissionWrapper"
 import { usePermissions } from "@/lib/hooks/usePermissions"
 import { PERMISSIONS } from "@/lib/utils/permissions"
 
@@ -118,37 +119,36 @@ export function QuickStats({ userId, workspaces }) {
         const changePercent = statData?.data?.statistics?.growthRate || statData?.growthRate || 0
 
         return (
-          <Card
-            key={config.key}
-            className="relative overflow-hidden hover:shadow-lg transition-all duration-200 starboard-card"
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className={`p-2 rounded-lg ${config.color}`}>
-                  <Icon className="h-5 w-5 text-white" />
+          <PermissionWrapper key={config.key} permission={config.permission}>
+            <Card className="relative overflow-hidden hover:shadow-lg transition-all duration-200 starboard-card">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div className={`p-2 rounded-lg ${config.color}`}>
+                    <Icon className="h-5 w-5 text-white" />
+                  </div>
+                  {changePercent !== 0 && (
+                    <div className={`flex items-center text-sm ${changePercent > 0 ? "text-green-600" : "text-red-600"}`}>
+                      {changePercent > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                      <span className="ml-1">{Math.abs(changePercent)}%</span>
+                    </div>
+                  )}
                 </div>
-                {changePercent !== 0 && (
-                  <div className={`flex items-center text-sm ${changePercent > 0 ? "text-green-600" : "text-red-600"}`}>
-                    {changePercent > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                    <span className="ml-1">{Math.abs(changePercent)}%</span>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="flex items-center justify-center h-16">
+                    <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-3xl font-bold text-gray-900 mb-1">{value}</div>
+                    <CardTitle className="text-sm font-medium text-gray-600 mb-2">{config.title}</CardTitle>
+                    {change > 0 && <p className="text-xs text-gray-500">+{change} this week</p>}
                   </div>
                 )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="flex items-center justify-center h-16">
-                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                </div>
-              ) : (
-                <div>
-                  <div className="text-3xl font-bold text-gray-900 mb-1">{value}</div>
-                  <CardTitle className="text-sm font-medium text-gray-600 mb-2">{config.title}</CardTitle>
-                  {change > 0 && <p className="text-xs text-gray-500">+{change} this week</p>}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </PermissionWrapper>
         )
       })}
     </div>

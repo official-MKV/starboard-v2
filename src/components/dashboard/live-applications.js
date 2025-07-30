@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { PermissionWrapper } from "@/components/permissionWrapper"
 import { usePermissions } from "@/lib/hooks/usePermissions"
 import { PERMISSIONS } from "@/lib/utils/permissions"
 import Link from "next/link"
@@ -72,12 +73,12 @@ export function LiveApplications({ userId }) {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Live Applications</h2>
-        {hasPermission(PERMISSIONS.APPLICATIONS_CREATE) && (
+        <PermissionWrapper permission={PERMISSIONS.APPLICATIONS_CREATE}>
           <Button>
             <Plus className="w-4 h-4 mr-2" />
             Create Application
           </Button>
-        )}
+        </PermissionWrapper>
       </div>
 
       {applications.length === 0 ? (
@@ -86,12 +87,12 @@ export function LiveApplications({ userId }) {
             <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No active applications</h3>
             <p className="text-gray-600 mb-6">Get started by creating your first application.</p>
-            {hasPermission(PERMISSIONS.APPLICATIONS_CREATE) && (
+            <PermissionWrapper permission={PERMISSIONS.APPLICATIONS_CREATE}>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
                 Create Application
               </Button>
-            )}
+            </PermissionWrapper>
           </CardContent>
         </Card>
       ) : (
@@ -156,14 +157,14 @@ export function LiveApplications({ userId }) {
                         View Applications
                       </Link>
                     </Button>
-                    {hasPermission(PERMISSIONS.APPLICATIONS_MANAGE) && (
+                    <PermissionWrapper permission={PERMISSIONS.APPLICATIONS_MANAGE}>
                       <Button asChild variant="outline" size="sm" className="flex-1 bg-transparent">
                         <Link href={`/applications/${application.id}/settings`}>
                           <Settings className="w-4 h-4 mr-2" />
                           Manage
                         </Link>
                       </Button>
-                    )}
+                    </PermissionWrapper>
                   </div>
                 </CardContent>
               </Card>

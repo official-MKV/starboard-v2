@@ -1,4 +1,4 @@
-app/api/judge/[eventId]/progress/route.js
+ 
 // Get judging progress for authenticated judge
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'

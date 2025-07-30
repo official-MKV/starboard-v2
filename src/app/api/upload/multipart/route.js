@@ -1,8 +1,9 @@
-// app/api/upload/multipart/route.js
+// app/api/upload/complete/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { awsService } from '@/lib/aws-service'
+import { awsService } from '@/lib/services/aws-service'
 import { logger } from '@/lib/logger'
+
 
 export async function POST(request) {
   try {
@@ -37,41 +38,4 @@ export async function POST(request) {
   }
 }
 
-// app/api/upload/complete/route.js
-import { NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { awsService } from '@/lib/aws-service'
-import { logger } from '@/lib/logger'
-
-export async function POST(request) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const { uploadId, parts } = body
-
-    if (!uploadId || !parts) {
-      return NextResponse.json(
-        { error: { message: 'uploadId and parts are required' } },
-        { status: 400 }
-      )
-    }
-
-    const result = await awsService.completeMultipartUpload(uploadId, parts)
-
-    return NextResponse.json({
-      success: true,
-      data: result
-    })
-
-  } catch (error) {
-    logger.error('Failed to complete multipart upload', { error: error.message })
-    return NextResponse.json(
-      { error: { message: 'Failed to complete upload' } },
-      { status: 500 }
-    )
-  }
-}
+ 

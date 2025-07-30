@@ -1,4 +1,4 @@
-app/api/judge/[eventId]/score/route.js
+ 
 // Submit scores for a submission (with proper auth and workspace context)
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
