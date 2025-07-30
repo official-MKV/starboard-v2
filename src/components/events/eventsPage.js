@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Plus,
@@ -50,7 +50,7 @@ const EVENT_TYPES = [
   { value: 'MENTORING', label: 'Mentoring', color: 'bg-green-100 text-green-800' },
   { value: 'PITCH', label: 'Pitch', color: 'bg-purple-100 text-purple-800' },
   { value: 'NETWORKING', label: 'Networking', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'DEMO_DAY', label: 'Demo Day', color: 'bg-red-100 text-red-800' },
+  { value: 'DEMO_DAY', label: 'Hackathon', color: 'bg-red-100 text-red-800' }, 
   { value: 'BOOTCAMP', label: 'Bootcamp', color: 'bg-indigo-100 text-indigo-800' },
   { value: 'WEBINAR', label: 'Webinar', color: 'bg-cyan-100 text-cyan-800' },
   { value: 'OTHER', label: 'Other', color: 'bg-gray-100 text-gray-800' },
@@ -119,6 +119,47 @@ export default function EventsPage() {
     },
   })
 
+  // Sort events by proximity to current date
+  const sortedEvents = useMemo(() => {
+    if (!eventsData?.data?.events) return []
+    
+    const now = new Date()
+    const events = [...eventsData.data.events]
+    
+    return events.sort((a, b) => {
+      const startDateA = new Date(a.startDate)
+      const startDateB = new Date(b.startDate)
+      const endDateA = new Date(a.endDate)
+      const endDateB = new Date(b.endDate)
+      
+      // Helper function to determine event status
+      const getEventStatus = (start, end) => {
+        if (now < start) return 'upcoming'
+        if (now >= start && now <= end) return 'ongoing'
+        return 'completed'
+      }
+      
+      const statusA = getEventStatus(startDateA, endDateA)
+      const statusB = getEventStatus(startDateB, endDateB)
+      
+      // Priority order: ongoing > upcoming > completed
+      const statusPriority = { ongoing: 0, upcoming: 1, completed: 2 }
+      
+      if (statusA !== statusB) {
+        return statusPriority[statusA] - statusPriority[statusB]
+      }
+      
+      // Within the same status, sort by proximity to current time
+      if (statusA === 'upcoming' || statusA === 'ongoing') {
+        // For upcoming and ongoing events, closer start dates come first
+        return startDateA.getTime() - startDateB.getTime()
+      } else {
+        // For completed events, more recent end dates come first
+        return endDateB.getTime() - endDateA.getTime()
+      }
+    })
+  }, [eventsData?.data?.events])
+
   // Handle filter changes
   const handleFilterChange = (key, value) => {
     const newFilters = { ...selectedFilters, [key]: value }
@@ -146,13 +187,10 @@ export default function EventsPage() {
     setIsCreateDialogOpen(true)
   }
 
-  // Handle delete event
   const handleDeleteEvent = eventId => {
-    // Handled by the components themselves
     refetch()
   }
-
-  // Handle clear filters
+ 
   const handleClearFilters = () => {
     const clearedFilters = {
       search: '',
@@ -166,11 +204,10 @@ export default function EventsPage() {
 
   // Handle create event from calendar
   const handleCreateEventFromDate = date => {
-    // You can pre-populate the form with the selected date
     setIsCreateDialogOpen(true)
   }
 
-  const events = eventsData?.data?.events || []
+  const events = sortedEvents || []
   const stats = eventsData?.data?.stats || {
     total: 0,
     upcoming: 0,
@@ -230,7 +267,7 @@ export default function EventsPage() {
                   Create Event
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-full sm:max-w-lg md:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto p-6 sm:rounded-lg">
                 <DialogHeader>
                   <DialogTitle>{editingEventId ? 'Edit Event' : 'Create New Event'}</DialogTitle>
                 </DialogHeader>
@@ -254,7 +291,7 @@ export default function EventsPage() {
               <CardTitle className="text-sm font-medium text-gray-600">Total Events</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+              <div className="text-2xl font-bold text-gray-600">{stats.total}</div>
             </CardContent>
           </Card>
 
@@ -263,7 +300,7 @@ export default function EventsPage() {
               <CardTitle className="text-sm font-medium text-gray-600">Upcoming</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{stats.upcoming}</div>
+              <div className="text-2xl font-bold text-gray-600">{stats.upcoming}</div>
             </CardContent>
           </Card>
 
@@ -272,7 +309,7 @@ export default function EventsPage() {
               <CardTitle className="text-sm font-medium text-gray-600">Ongoing</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.ongoing}</div>
+              <div className="text-2xl font-bold text-gray-600">{stats.ongoing}</div>
             </CardContent>
           </Card>
 
@@ -288,8 +325,8 @@ export default function EventsPage() {
 
         {/* View Tabs */}
         <Tabs value={viewMode} onValueChange={handleViewModeChange} className="space-y-6">
-          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-            <TabsList className="grid w-full lg:w-auto grid-cols-3">
+          <div className="flex  flex-row flex-wrap lg:flex-row gap-4 items-start lg:items-center justify-between">
+            <TabsList className="grid w-full  grid-cols-3">
               <TabsTrigger value="grid" className="flex items-center gap-2">
                 <Grid className="w-4 h-4" />
                 Grid
@@ -304,7 +341,6 @@ export default function EventsPage() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Filters - Hide on calendar view */}
             {viewMode !== 'calendar' && (
               <Card className="starboard-card w-full lg:w-auto">
                 <CardContent className="p-4">

@@ -334,7 +334,7 @@ The {{workspace_name}} Team`
    * Get available permissions grouped by category
    * @returns {Array} - Permission categories
    */
-  static getAvailablePermissions() {
+static getAvailablePermissions() {
     return [
       {
         category: 'Workspace Management',
@@ -538,6 +538,26 @@ The {{workspace_name}} Team`
             key: PERMISSIONS.EVENTS_EXPORT,
             label: 'Export Event Data',
             description: 'Export event and registration data',
+          },
+        ],
+      },
+      {
+        category: 'Demo Day',
+        permissions: [
+          {
+            key: PERMISSIONS.DEMO_DAY_PARTICIPATE,
+            label: 'Participate in Demo Day',
+            description: 'Submit projects and participate in demo day events',
+          },
+          {
+            key: PERMISSIONS.DEMO_DAY_JUDGE,
+            label: 'Judge Demo Day',
+            description: 'Score and review demo day submissions',
+          },
+          {
+            key: PERMISSIONS.DEMO_DAY_MANAGE,
+            label: 'Manage Demo Day',
+            description: 'Full demo day administration and control',
           },
         ],
       },
@@ -833,7 +853,6 @@ The {{workspace_name}} Team`
       },
     ]
   }
-
   /**
    * Create onboarding form configuration
    * @param {Array} fields - Form field definitions

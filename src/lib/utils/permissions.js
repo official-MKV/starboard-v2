@@ -45,6 +45,11 @@ export const PERMISSIONS = {
   EVENTS_PUBLISH: 'events.publish',
   EVENTS_EXPORT: 'events.export',
 
+  // Demo Day Permissions
+  DEMO_DAY_PARTICIPATE: 'demo-day.participate',
+  DEMO_DAY_JUDGE: 'demo-day.judge',
+  DEMO_DAY_MANAGE: 'demo-day.manage',
+
   // Resources
   RESOURCES_VIEW: 'resources.view',
   RESOURCES_MANAGE: 'resources.manage',

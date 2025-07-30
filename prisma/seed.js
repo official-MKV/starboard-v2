@@ -20,8 +20,10 @@ async function seed() {
         firstName: 'Admin',
         lastName: 'User',
         isActive: true,
-        isVerified: true,
+        isEmailVerified: true,
         emailVerifiedAt: new Date(),
+        isOnboardingCompleted: true,
+        onboardingCompletedAt: new Date(),
       },
     })
 
@@ -34,8 +36,10 @@ async function seed() {
         firstName: 'John',
         lastName: 'Doe',
         isActive: true,
-        isVerified: true,
+        isEmailVerified: true,
         emailVerifiedAt: new Date(),
+        isOnboardingCompleted: true,
+        onboardingCompletedAt: new Date(),
       },
     })
 
@@ -48,8 +52,10 @@ async function seed() {
         firstName: 'Jane',
         lastName: 'Smith',
         isActive: true,
-        isVerified: true,
+        isEmailVerified: true,
         emailVerifiedAt: new Date(),
+        isOnboardingCompleted: true,
+        onboardingCompletedAt: new Date(),
       },
     })
 
@@ -96,6 +102,8 @@ async function seed() {
           'resources.manage',
           'messages.manage',
         ]),
+        canMentor: true,
+        canBeMentee: false,
       },
     })
 
@@ -120,6 +128,8 @@ async function seed() {
           'resources.view',
           'messages.send',
         ]),
+        canMentor: false,
+        canBeMentee: true,
       },
     })
 
@@ -143,6 +153,8 @@ async function seed() {
           'resources.view',
           'messages.send',
         ]),
+        canMentor: false,
+        canBeMentee: true,
       },
     })
 
@@ -211,48 +223,75 @@ async function seed() {
         isActive: true,
         openDate: new Date(),
         closeDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-        maxApplicants: 50,
-        formFields: JSON.stringify([
-          {
-            id: 'company_name',
-            type: 'text',
-            label: 'Company Name',
-            required: true,
-            placeholder: 'Enter your company name',
-          },
-          {
-            id: 'description',
-            type: 'textarea',
-            label: 'Company Description',
-            required: true,
-            placeholder: 'Describe your company and what you do',
-          },
-          {
-            id: 'team_size',
-            type: 'select',
-            label: 'Team Size',
-            required: true,
-            options: ['1-2', '3-5', '6-10', '10+'],
-          },
-          {
-            id: 'funding_stage',
-            type: 'select',
-            label: 'Funding Stage',
-            required: true,
-            options: ['Pre-seed', 'Seed', 'Series A', 'Series B+'],
-          },
-          {
-            id: 'pitch_deck',
-            type: 'file',
-            label: 'Pitch Deck',
-            required: false,
-            accept: '.pdf,.ppt,.pptx',
-          },
-        ]),
+        maxSubmissions: 50,
+        allowMultipleSubmissions: false,
+        requireAuthentication: false,
+        reviewerInstructions: 'Please review applications based on team strength, market opportunity, and traction.',
+        scoringCriteria: JSON.stringify({
+          team: { weight: 30, description: 'Team experience and skills' },
+          market: { weight: 25, description: 'Market size and opportunity' },
+          traction: { weight: 25, description: 'Current traction and growth' },
+          innovation: { weight: 20, description: 'Innovation and uniqueness' }
+        }),
+        submissionCount: 0,
+        createdBy: adminUser.id,
       },
     })
 
-    console.log('✅ Sample application created')
+    // Create application fields
+    const fieldData = [
+      {
+        applicationId: application.id,
+        type: 'TEXT',
+        label: 'Company Name',
+        required: true,
+        placeholder: 'Enter your company name',
+        order: 1,
+      },
+      {
+        applicationId: application.id,
+        type: 'TEXTAREA',
+        label: 'Company Description',
+        required: true,
+        placeholder: 'Describe your company and what you do',
+        order: 2,
+        maxLength: 1000,
+      },
+      {
+        applicationId: application.id,
+        type: 'SELECT',
+        label: 'Team Size',
+        required: true,
+        order: 3,
+        options: JSON.stringify(['1-2', '3-5', '6-10', '10+']),
+      },
+      {
+        applicationId: application.id,
+        type: 'SELECT',
+        label: 'Funding Stage',
+        required: true,
+        order: 4,
+        options: JSON.stringify(['Pre-seed', 'Seed', 'Series A', 'Series B+']),
+      },
+      {
+        applicationId: application.id,
+        type: 'FILE_UPLOAD',
+        label: 'Pitch Deck',
+        required: false,
+        order: 5,
+        allowedFileTypes: JSON.stringify(['.pdf', '.ppt', '.pptx']),
+        maxFileSize: 10485760, // 10MB
+        maxFiles: 1,
+      },
+    ]
+
+    for (const field of fieldData) {
+      await prisma.applicationField.create({
+        data: field,
+      })
+    }
+
+    console.log('✅ Sample application and fields created')
 
     // Create sample application submissions (external applicants)
     await prisma.applicationSubmission.create({
@@ -330,11 +369,21 @@ async function seed() {
         description: 'Learn how to create compelling investor pitches',
         type: 'WORKSHOP',
         isPublic: true,
+        isVirtual: true,
         startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 1 week from now
         endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000), // 2 hours later
         location: 'Virtual',
         virtualLink: 'https://zoom.us/meeting/demo',
         maxAttendees: 100,
+        timezone: 'UTC',
+        isRecurring: false,
+        waitingRoom: true,
+        capacity: 100,
+        isRecorded: true,
+        autoRecord: true,
+        agenda: 'Introduction to pitch decks, key components, practice session',
+        instructions: 'Please join 5 minutes early and have your pitch deck ready',
+        tags: ['workshop', 'pitch', 'startup'],
       },
     })
 
@@ -346,10 +395,19 @@ async function seed() {
         description: 'Connect with other founders and mentors',
         type: 'NETWORKING',
         isPublic: true,
+        isVirtual: false,
         startDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 2 weeks from now
         endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000), // 3 hours later
         location: 'San Francisco, CA',
         maxAttendees: 50,
+        timezone: 'America/Los_Angeles',
+        isRecurring: false,
+        waitingRoom: false,
+        capacity: 50,
+        isRecorded: false,
+        autoRecord: false,
+        agenda: 'Networking, panel discussion, Q&A',
+        tags: ['networking', 'founders', 'mentors'],
       },
     })
 
@@ -366,6 +424,7 @@ async function seed() {
         isPublic: true,
         tags: ['templates', 'business-plan', 'legal'],
         category: 'Templates',
+        downloadCount: 0,
       },
     })
 
@@ -379,6 +438,7 @@ async function seed() {
         isPublic: false,
         tags: ['fundraising', 'investment', 'video-course'],
         category: 'Education',
+        downloadCount: 0,
       },
     })
 
@@ -408,12 +468,61 @@ async function seed() {
 
     console.log('✅ Sample notifications created')
 
+    // Create sample mentorship assignment
+    await prisma.mentorshipAssignment.create({
+      data: {
+        workspaceId: workspace.id,
+        mentorId: adminUser.id, // Admin as mentor
+        menteeId: startupUser.id, // Startup user as mentee
+        status: 'ACTIVE',
+        totalMeetings: 1,
+        lastMeetingAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
+        nextMeetingDue: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000), // 3 weeks from now
+        notes: 'Initial mentorship assignment for startup guidance',
+        createdById: adminUser.id,
+      },
+    })
+
+    console.log('✅ Sample mentorship assignment created')
+
+    // Create sample email template
+    await prisma.emailTemplate.create({
+      data: {
+        workspaceId: workspace.id,
+        name: 'Welcome Invitation',
+        subject: 'Welcome to {{workspace_name}}',
+        type: 'INVITATION',
+        description: 'Default invitation template for new members',
+        content: `
+          <h2>Welcome to {{workspace_name}}!</h2>
+          <p>Hi {{first_name}},</p>
+          <p>You've been invited to join our accelerator program. Click the link below to accept your invitation:</p>
+          <a href="{{invitation_link}}">Accept Invitation</a>
+          <p>Best regards,<br>{{workspace_name}} Team</p>
+        `,
+        requiredVariables: ['workspace_name', 'first_name', 'invitation_link'],
+        optionalVariables: ['personal_message'],
+        isActive: true,
+        isDefault: true,
+        createdBy: adminUser.id,
+      },
+    })
+
+    console.log('✅ Sample email template created')
+
+    // Update application submission count
+    await prisma.application.update({
+      where: { id: application.id },
+      data: { submissionCount: 3 },
+    })
+
     console.log('🎉 Database seeded successfully!')
     console.log('\n📧 Test credentials:')
     console.log('Admin: admin@starboard.com / admin123')
     console.log('User: user@starboard.com / user123')
     console.log('Startup: startup@example.com / user123')
     console.log('\n🏢 Workspace: demo-accelerator')
+    console.log('🎯 Application ID: sample-application-id')
   } catch (error) {
     console.error('❌ Error seeding database:', error)
     throw error

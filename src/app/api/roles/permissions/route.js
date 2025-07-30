@@ -5,10 +5,8 @@ import { WorkspaceContext } from '@/lib/workspace-context'
 import { RoleService } from '@/lib/services/role-service'
 import { logger } from '@/lib/logger'
 
-/**
- * GET /api/roles/permissions
- * Get available permissions grouped by category
- */
+ 
+ 
 export async function GET(request) {
   try {
     const session = await auth()

@@ -1,263 +1,156 @@
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { FileText, Calendar, Users, MessageCircle, FolderOpen, Loader2 } from 'lucide-react'
-import { PermissionWrapper } from '../permissionWrapper'
-import { usePermissions } from '@/lib/hooks/usePermissions'
-import { PERMISSIONS } from '@/lib/utils/permissions'
-import Link from 'next/link'
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { FileText, Calendar, Users, MessageCircle, FolderOpen, Loader2, TrendingUp, TrendingDown } from "lucide-react"
+import { usePermissions } from "@/lib/hooks/usePermissions"
+import { PERMISSIONS } from "@/lib/utils/permissions"
 
 export function QuickStats({ userId, workspaces }) {
   const { hasPermission } = usePermissions()
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState({})
-  const [errors, setErrors] = useState({})
-  const [fetchedKeys, setFetchedKeys] = useState({})
 
   const statsConfig = [
     {
-      key: 'applications',
+      key: "applications",
       permission: PERMISSIONS.APPLICATIONS_VIEW,
-      endpoint: '/api/applications/statistics',
-      title: 'Active Applications',
+      endpoint: "/api/applications/statistics",
+      title: "Applications",
       icon: FileText,
-      defaultValue: '0',
-      formatChange: data => data?.change || data?.changeText || 'No change',
-      formatValue: data => data?.count || data?.total || data?.active || '0',
+      color: "bg-blue-500",
     },
     {
-      key: 'events',
+      key: "events",
       permission: PERMISSIONS.EVENTS_VIEW,
-      endpoint: '/api/events/statistics',
-      title: 'Upcoming Events',
+      endpoint: "/api/events/statistics",
+      title: "Events",
       icon: Calendar,
-      defaultValue: '0',
-      formatChange: data => data?.nextEvent || data?.next || data?.upcoming || 'No events',
-      formatValue: data => data?.count || data?.total || data?.upcoming || '0',
+      color: "bg-green-500",
     },
     {
-      key: 'users',
+      key: "users",
       permission: PERMISSIONS.USERS_VIEW,
-      endpoint: '/api/users/statistics',
-      title: 'Team Members',
+      endpoint: "/api/users/statistics",
+      title: "Team Members",
       icon: Users,
-      defaultValue: workspaces?.[0]?.memberCount || '0',
-      formatChange: data => data?.change || data?.changeText || data?.newMembers || 'No change',
-      formatValue: data =>
-        data?.count || data?.total || data?.members || workspaces?.[0]?.memberCount || '0',
+      color: "bg-purple-500",
     },
     {
-      key: 'messages',
+      key: "messages",
       permission: PERMISSIONS.CHAT_VIEW,
-      endpoint: '/api/messages/statistics',
-      title: 'Unread Messages',
+      endpoint: "/api/messages/statistics",
+      title: "Messages",
       icon: MessageCircle,
-      defaultValue: '0',
-      formatChange: data =>
-        data?.urgent || data?.urgentCount
-          ? `${data.urgent || data.urgentCount} urgent`
-          : 'No urgent',
-      formatValue: data => data?.count || data?.unread || data?.total || '0',
+      color: "bg-orange-500",
     },
     {
-      key: 'resources',
+      key: "resources",
       permission: PERMISSIONS.RESOURCES_VIEW,
-      endpoint: '/api/resources/statistics',
-      title: 'Resources',
+      endpoint: "/api/resources/statistics",
+      title: "Resources",
       icon: FolderOpen,
-      defaultValue: '0',
-      formatChange: data => data?.change || data?.changeText || data?.recent || 'No change',
-      formatValue: data => data?.count || data?.total || data?.files || '0',
+      color: "bg-indigo-500",
     },
   ]
 
-  const actionCards = [
-    {
-      key: 'applications-action',
-      permission: PERMISSIONS.APPLICATIONS_VIEW,
-      title: 'Applications',
-      description: 'View and manage accelerator applications',
-      icon: FileText,
-      href: '/applications',
-      buttonText: 'View All',
-      statKey: 'applications',
-      statLabel: 'Open applications',
-    },
-    {
-      key: 'events-action',
-      permission: PERMISSIONS.EVENTS_VIEW,
-      title: 'Events',
-      description: 'Upcoming workshops and networking events',
-      icon: Calendar,
-      href: '/events',
-      buttonText: 'View All',
-      statKey: 'events',
-      statLabel: 'This week',
-    },
-    {
-      key: 'resources-action',
-      permission: PERMISSIONS.RESOURCES_VIEW,
-      title: 'Resources',
-      description: 'Access templates, guides, and learning materials',
-      icon: FolderOpen,
-      href: '/resources',
-      buttonText: 'Browse',
-      statKey: 'resources',
-      statLabel: 'Available resources',
-    },
-  ]
+  const fetchStats = async () => {
+    const promises = statsConfig
+      .filter((config) => hasPermission(config.permission))
+      .map(async (config) => {
+        setLoading((prev) => ({ ...prev, [config.key]: true }))
+        try {
+          const response = await fetch(config.endpoint)
+          if (response.ok) {
+            const data = await response.json()
+            return { key: config.key, data }
+          }
+        } catch (error) {
+          console.error(`Error fetching ${config.key}:`, error)
+        } finally {
+          setLoading((prev) => ({ ...prev, [config.key]: false }))
+        }
+        return { key: config.key, data: null }
+      })
 
-  const fetchStatistic = async config => {
-    const { key, endpoint } = config
-
-    if (!hasPermission(config.permission) || fetchedKeys[key]) {
-      return
-    }
-
-    try {
-      setLoading(prev => ({ ...prev, [key]: true }))
-      setErrors(prev => ({ ...prev, [key]: null }))
-
-      const response = await fetch(endpoint)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${key} statistics`)
-      }
-
-      const data = await response.json()
-      if (!data || Object.keys(data).length === 0) {
-        // Mark as fetched even if no data
-        setFetchedKeys(prev => ({ ...prev, [key]: true }))
-        return
-      }
-
-      setStats(prev => ({ ...prev, [key]: data }))
-    } catch (err) {
-      console.error(`Error fetching ${key} stats:`, err)
-      setErrors(prev => ({ ...prev, [key]: err.message }))
-    } finally {
-      setFetchedKeys(prev => ({ ...prev, [key]: true }))
-      setLoading(prev => ({ ...prev, [key]: false }))
-    }
+    const results = await Promise.all(promises)
+    const newStats = {}
+    results.forEach(({ key, data }) => {
+      newStats[key] = data
+    })
+    setStats(newStats)
   }
 
   useEffect(() => {
-    statsConfig.forEach(config => {
-      fetchStatistic(config)
-    })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchStats()
+  }, [])
 
-  const getChangeType = (data, key) => {
-    if (key === 'messages' && (data?.urgent > 0 || data?.urgentCount > 0)) return 'warning'
-    if (data?.changeType) return data.changeType
-    if (data?.change && data.change.includes('+')) return 'positive'
-    if (data?.changeText && data.changeText.includes('+')) return 'positive'
-    return 'neutral'
-  }
+  console.log(stats)
 
-  const visibleStats = statsConfig.filter(config => hasPermission(config.permission))
-  const visibleActionCards = actionCards.filter(card => hasPermission(card.permission))
+  const visibleStats = statsConfig.filter((config) => hasPermission(config.permission))
 
   return (
-    <div className="space-y-6">
-      {visibleStats.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-          {visibleStats.map(config => {
-            const Icon = config.icon
-            const statData = stats[config.key]
-            const isLoading = loading[config.key]
-            const error = errors[config.key]
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      {visibleStats.map((config) => {
+        const Icon = config.icon
+        const statData = stats[config.key]
+        const isLoading = loading[config.key]
 
-            return (
-              <Card key={config.key} className="starboard-card hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium text-slate-gray-600">
-                      {config.title}
-                    </CardTitle>
-                    <Icon className="h-4 w-4 text-slate-gray-400" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {isLoading ? (
-                    <div className="flex items-center justify-center h-16">
-                      <Loader2 className="h-5 w-5 animate-spin text-slate-gray-400" />
-                    </div>
-                  ) : error ? (
-                    <div>
-                      <div className="text-2xl font-bold text-red-500">Error</div>
-                      <p className="text-xs mt-1 text-red-600">{error}</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="text-2xl font-bold text-charcoal-900">
-                        {config.formatValue(statData)}
-                      </div>
-                      <p
-                        className={`text-xs mt-1 ${
-                          getChangeType(statData, config.key) === 'positive'
-                            ? 'text-green-600'
-                            : getChangeType(statData, config.key) === 'warning'
-                              ? 'text-yellow-600'
-                              : 'text-slate-gray-500'
-                        }`}
-                      >
-                        {config.formatChange(statData)}
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
+        const value =
+          statData?.data?.totalApplications ||
+          statData?.totalApplications ||
+          statData?.data?.statistics?.totalUsers ||
+          statData?.totalUsers ||
+          statData?.data?.count ||
+          statData?.count ||
+          statData?.total ||
+          "0"
 
-      {visibleActionCards.length > 0 && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {visibleActionCards.map(card => {
-            const Icon = card.icon
-            const statData = stats[card.statKey]
-            const isLoading = loading[card.statKey]
-            const error = errors[card.statKey]
+        const change =
+          statData?.data?.thisWeekSubmissions ||
+          statData?.thisWeekSubmissions ||
+          statData?.data?.statistics?.recentJoins ||
+          statData?.recentJoins ||
+          statData?.data?.change ||
+          statData?.change ||
+          0
 
-            return (
-              <Card
-                key={card.key}
-                className="starboard-card hover:shadow-soft-lg transition-shadow cursor-pointer"
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <Icon className="h-8 w-8 text-primary" />
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={card.href}>{card.buttonText}</Link>
-                    </Button>
+        const changePercent = statData?.data?.statistics?.growthRate || statData?.growthRate || 0
+
+        return (
+          <Card
+            key={config.key}
+            className="relative overflow-hidden hover:shadow-lg transition-all duration-200 starboard-card"
+          >
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div className={`p-2 rounded-lg ${config.color}`}>
+                  <Icon className="h-5 w-5 text-white" />
+                </div>
+                {changePercent !== 0 && (
+                  <div className={`flex items-center text-sm ${changePercent > 0 ? "text-green-600" : "text-red-600"}`}>
+                    {changePercent > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                    <span className="ml-1">{Math.abs(changePercent)}%</span>
                   </div>
-                  <CardTitle>{card.title}</CardTitle>
-                  <CardDescription>{card.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    {isLoading ? (
-                      <Loader2 className="h-6 w-6 animate-spin text-slate-gray-400" />
-                    ) : error ? (
-                      <span className="text-2xl font-bold text-red-500">--</span>
-                    ) : (
-                      <span className="text-2xl font-bold text-charcoal-800">
-                        {statsConfig
-                          .find(config => config.key === card.statKey)
-                          ?.formatValue(statData) || '0'}
-                      </span>
-                    )}
-                    <span className="text-sm text-slate-gray-600">{card.statLabel}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-16">
+                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <div>
+                  <div className="text-3xl font-bold text-gray-900 mb-1">{value}</div>
+                  <CardTitle className="text-sm font-medium text-gray-600 mb-2">{config.title}</CardTitle>
+                  {change > 0 && <p className="text-xs text-gray-500">+{change} this week</p>}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })}
     </div>
   )
 }

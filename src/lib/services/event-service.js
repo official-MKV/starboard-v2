@@ -203,6 +203,20 @@ export class EventService {
               slug: true,
             },
           },
+           demoDayConfig: {
+          select: {
+            submissionDeadline: true,
+            allowLateSubmissions: true,
+            maxTeamSize: true,
+            maxPitchDuration: true,
+            requireVideo: true,
+            requirePresentation: true,
+            requireDemo: true,
+            requireBusinessPlan: true,
+            description: true,
+            scoringCriteria:true
+          }
+        },
           speakers: {
             orderBy: { order: 'asc' },
           },
@@ -538,7 +552,74 @@ export class EventService {
       throw new Error(error.message || 'Failed to delete event')
     }
   }
+static async createDemoDayConfig(eventId, configData, userId) {
+  try {
+    const config = await prisma.demoDayConfig.create({
+      data: {
+        eventId,
+        ...configData,
+      },
+    })
 
+    logger.info('Demo day config created', { eventId, configId: config.id, userId })
+    return config
+  } catch (error) {
+    logger.error('Failed to create demo day config', { eventId, error: error.message })
+    throw new Error('Failed to create demo day configuration')
+  }
+}
+
+/**
+ * Update demo day configuration
+ */
+static async updateDemoDayConfig(eventId, configData, userId) {
+  try {
+    const config = await prisma.demoDayConfig.upsert({
+      where: { eventId },
+      update: configData,
+      create: {
+        eventId,
+        ...configData,
+      },
+    })
+
+    logger.info('Demo day config updated', { eventId, configId: config.id, userId })
+    return config
+  } catch (error) {
+    logger.error('Failed to update demo day config', { eventId, error: error.message })
+    throw new Error('Failed to update demo day configuration')
+  }
+}
+
+/**
+ * Assign judges to demo day
+ */
+static async assignJudges(eventId, judges, userId) {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // Remove existing judges
+      await tx.demoDayJudge.deleteMany({
+        where: { eventId }
+      })
+
+      // Add new judges
+      if (judges.length > 0) {
+        await tx.demoDayJudge.createMany({
+          data: judges.map(judge => ({
+            eventId,
+            ...judge,
+          }))
+        })
+      }
+
+      logger.info('Judges assigned to demo day', { eventId, judgeCount: judges.length, userId })
+      return { success: true }
+    })
+  } catch (error) {
+    logger.error('Failed to assign judges', { eventId, error: error.message })
+    throw new Error('Failed to assign judges')
+  }
+}
   /**
    * Register user for event
    */

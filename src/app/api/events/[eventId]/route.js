@@ -17,6 +17,7 @@ export async function GET(request, { params }) {
     }
 
     const eventId = params.eventId
+    
 
     // Get event details first to check workspace access
     const event = await EventService.findById(eventId)

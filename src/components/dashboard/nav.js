@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Trophy, 
   X,
 } from 'lucide-react'
 import { getInitials } from '@/lib/utils'
@@ -69,6 +70,12 @@ const navigationItems = [
     icon: Users,
     permissions: [PERMISSIONS.USERS_VIEW, PERMISSIONS.USERS_MANAGE],
   },
+  {
+  name: 'Demo Days',
+  href: '/demo-days',
+  icon: Trophy,  
+  permissions: [PERMISSIONS.DEMO_DAY_PARTICIPATE, PERMISSIONS.DEMO_DAY_JUDGE, PERMISSIONS.DEMO_DAY_MANAGE],
+}
 ]
 
 // Skeleton components

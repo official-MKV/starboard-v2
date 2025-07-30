@@ -135,6 +135,8 @@ model User {
 
   organizedMeetings     Meeting[] @relation("MeetingOrganizer")
   createdMeetings       Meeting[] @relation("MeetingCreator")
+  demoDaySubmissions DemoDaySubmission[]
+  judgeAssignments   EventJudge[]
 
   @@map("users")
 }
@@ -603,6 +605,10 @@ model Event {
   creator        User                @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
   registrations  EventRegistration[]
   resources      EventResource[]
+
+  demoDayConfig    DemoDayConfig?
+  demoDaySubmissions DemoDaySubmission[]
+  judges           EventJudge[]
 
   @@map("events")
 }
@@ -1165,7 +1171,6 @@ model MentorshipHistory {
   @@map("mentorship_history")
 }
 
-// Enums
 enum MentorshipStatus {
   ACTIVE
   PAUSED
@@ -1180,3 +1185,149 @@ enum MentorshipAction {
   MEETING_COMPLETED
   TERMINATED
 }
+
+model DemoDaySubmission {
+  id            String   @id @default(cuid())
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  submitterId   String
+  submitter     User     @relation(fields: [submitterId], references: [id], onDelete: Cascade)
+  
+  // Project details
+  projectTitle  String
+  description   String
+  category      String?
+  stage         String?  // MVP, Beta, Launched, etc.
+  submissionUrl String?  // Main project URL
+  
+  // Calculated fields (updated via triggers/jobs)
+  averageScore  Float?   @default(0)
+  rank          Int?
+  
+  // Timestamps
+  submittedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  resources     DemoDaySubmissionResource[]
+  scores        DemoDayScore[]
+  
+  // Ensure one submission per user per event
+  @@unique([eventId, submitterId])
+  @@map("demo_day_submissions")
+}
+
+
+model DemoDaySubmissionResource {
+  id           String              @id @default(cuid())
+  submissionId String
+  submission   DemoDaySubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  
+  type         SubmissionResourceType
+  title        String
+  url          String
+  description  String?
+  order        Int                 @default(0)
+  
+  createdAt    DateTime           @default(now())
+  
+  @@map("demo_day_submission_resources")
+}
+
+
+model DemoDayScore {
+  id           String            @id @default(cuid())
+  submissionId String
+  submission   DemoDaySubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  judgeId      String
+  judge        EventJudge        @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  
+  // Flexible scoring - stores scores for each criterion
+  // Example: {"Innovation": 8.5, "Market Opportunity": 7.0, "Team": 9.0, "Execution": 8.0, "Presentation": 7.5}
+  criteriaScores Json
+  
+  // Calculated total score (weighted sum of all criteria)
+  totalScore   Float             @default(0)
+  
+  // Judge feedback
+  feedback     String?
+  
+  // Timestamps
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  
+  // Ensure one score per judge per submission (all judges must score all submissions)
+  @@unique([submissionId, judgeId])
+  @@map("demo_day_scores")
+}
+model DemoDayConfig {
+  id                    String   @id @default(cuid())
+  eventId               String   @unique
+  event                 Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+ 
+  submissionDeadline    DateTime
+  allowLateSubmissions  Boolean  @default(false)
+  maxTeamSize          Int      @default(5)
+  maxPitchDuration     Int      @default(5)
+  
+  // Required components
+  requireVideo         Boolean  @default(true)
+  requirePresentation  Boolean  @default(true)
+  requireDemo          Boolean  @default(false)
+  requireBusinessPlan  Boolean  @default(false)
+  
+  // Judging settings
+  judgingStartTime     DateTime?
+  judgingEndTime       DateTime?
+  showResultsLive     Boolean  @default(false)
+  resultsPublicAt     DateTime?
+  showJudgeNames      Boolean  @default(true)
+  showDetailedScores  Boolean  @default(false)
+  
+  // Instructions and flexible criteria
+  description         String?   // Instructions for participants
+  scoringCriteria     Json      // {"Innovation": 25, "Market Opportunity": 20, "Team": 15, "Execution": 25, "Presentation": 15}
+  maxScore           Int       @default(10) // Max score per criterion (total = sum of all weights)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@map("demo_day_configs")
+}
+model EventJudge {
+  id         String   @id @default(cuid())
+  eventId    String
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  isExternal Boolean  @default(false) // External judges vs internal users
+  invitedAt  DateTime @default(now())
+  acceptedAt DateTime?
+  status     JudgeStatus @default(INVITED)
+  
+  // Relations
+  scores     DemoDayScore[]
+  
+  // Ensure one judge record per user per event
+  @@unique([eventId, userId])
+  @@map("event_judges")
+}
+ 
+enum SubmissionResourceType {
+  VIDEO
+  PRESENTATION
+  DEMO_LINK
+  BUSINESS_PLAN
+  GITHUB_REPO
+  OTHER
+}
+
+enum JudgeStatus {
+  INVITED
+  ACCEPTED
+  DECLINED
+  COMPLETED 
+}
+

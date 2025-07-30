@@ -1,14 +1,11 @@
-// app/api/events/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
 import { EventService } from '@/lib/services/event-service'
+import { DemoDayService } from '@/lib/services/demoday-service'
 import { logger } from '@/lib/logger'
+import { prisma } from '@/lib/database'
 
-/**
- * GET /api/events
- * Get events for current workspace with filters
- */
 export async function GET(request) {
   try {
     const session = await auth()
@@ -16,7 +13,6 @@ export async function GET(request) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
       return NextResponse.json(
@@ -25,7 +21,6 @@ export async function GET(request) {
       )
     }
 
-    // Check permissions
     const hasPermission = await WorkspaceContext.hasAnyPermission(
       session.user.id,
       workspaceContext.workspaceId,
@@ -39,7 +34,6 @@ export async function GET(request) {
       )
     }
 
-    // Parse query parameters
     const { searchParams } = new URL(request.url)
     const filters = {
       search: searchParams.get('search') || '',
@@ -52,7 +46,6 @@ export async function GET(request) {
       limit: parseInt(searchParams.get('limit')) || 50,
     }
 
-    // Get events for workspace
     const eventsData = await EventService.findByWorkspace(workspaceContext.workspaceId, filters)
 
     logger.info('Events fetched', {
@@ -75,10 +68,6 @@ export async function GET(request) {
   }
 }
 
-/**
- * POST /api/events
- * Create a new event
- */
 export async function POST(request) {
   try {
     const session = await auth()
@@ -86,7 +75,6 @@ export async function POST(request) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
       return NextResponse.json(
@@ -95,7 +83,6 @@ export async function POST(request) {
       )
     }
 
-    // Check permissions
     const hasPermission = await WorkspaceContext.hasPermission(
       session.user.id,
       workspaceContext.workspaceId,
@@ -109,7 +96,6 @@ export async function POST(request) {
       )
     }
 
-    // Parse request body
     const body = await request.json()
     const {
       title,
@@ -125,7 +111,6 @@ export async function POST(request) {
       bannerImage,
       waitingRoom,
       autoRecord,
-      requireApproval,
       agenda,
       instructions,
       tags,
@@ -135,9 +120,9 @@ export async function POST(request) {
       timezone,
       isRecurring,
       recurringRule,
+      demoDayConfig,
     } = body
 
-    // Validate required fields
     if (!title?.trim()) {
       return NextResponse.json({ error: { message: 'Event title is required' } }, { status: 400 })
     }
@@ -157,7 +142,13 @@ export async function POST(request) {
       )
     }
 
-    // Create event data
+    if (type === 'DEMO_DAY' && !demoDayConfig?.submissionDeadline) {
+      return NextResponse.json(
+        { error: { message: 'Demo day submission deadline is required' } },
+        { status: 400 }
+      )
+    }
+
     const eventData = {
       title: title.trim(),
       description: description?.trim() || null,
@@ -171,7 +162,6 @@ export async function POST(request) {
       bannerImage: bannerImage?.trim() || null,
       waitingRoom: Boolean(waitingRoom),
       autoRecord: Boolean(autoRecord),
-      requireApproval: Boolean(requireApproval),
       agenda: agenda?.trim() || null,
       instructions: instructions?.trim() || null,
       tags: Array.isArray(tags) ? tags.filter(tag => tag?.trim()) : [],
@@ -181,31 +171,100 @@ export async function POST(request) {
       speakers: Array.isArray(speakers) ? speakers : [],
       accessRules: Array.isArray(accessRules) ? accessRules : [],
       resources: Array.isArray(resources) ? resources : [],
-
-      // Virtual meeting will be handled in the service
-      virtualLink: null, // This will be set by the service if virtual
+      virtualLink: null,
     }
 
-    // Create the event
-    const event = await EventService.create(
-      workspaceContext.workspaceId,
-      eventData,
-      session.user.id
-    )
+    let event
 
-    logger.info('Event created', {
-      eventId: event.id,
-      eventTitle: event.title,
-      workspaceId: workspaceContext.workspaceId,
-      userId: session.user.id,
-      isPublic: event.isPublic,
-      isVirtual: event.virtualLink ? true : false,
-    })
+    if (type === 'DEMO_DAY') {
+      event = await prisma.$transaction(async (tx) => {
+        const createdEvent = await EventService.create(
+          workspaceContext.workspaceId,
+          eventData,
+          session.user.id,
+          tx
+        )
+
+        const demoDayConfigData = {
+          eventId: createdEvent.id,
+          submissionDeadline: new Date(demoDayConfig.submissionDeadline),
+          allowLateSubmissions: Boolean(demoDayConfig.allowLateSubmissions),
+          maxTeamSize: parseInt(demoDayConfig.maxTeamSize) || 5,
+          maxPitchDuration: parseInt(demoDayConfig.maxPitchDuration) || 5,
+          requireVideo: Boolean(demoDayConfig.requireVideo),
+          requirePresentation: Boolean(demoDayConfig.requirePresentation),
+          requireDemo: Boolean(demoDayConfig.requireDemo),
+          requireBusinessPlan: Boolean(demoDayConfig.requireBusinessPlan),
+          judgingStartTime: demoDayConfig.judgingStartTime ? new Date(demoDayConfig.judgingStartTime) : null,
+          judgingEndTime: demoDayConfig.judgingEndTime ? new Date(demoDayConfig.judgingEndTime) : null,
+          scoringCriteria: demoDayConfig.scoringCriteria || {},
+          maxScore: parseInt(demoDayConfig.maxScore) || 50,
+          showResultsLive: Boolean(demoDayConfig.showResultsLive),
+          resultsPublicAt: demoDayConfig.resultsPublicAt ? new Date(demoDayConfig.resultsPublicAt) : null,
+          showJudgeNames: Boolean(demoDayConfig.showJudgeNames),
+          showDetailedScores: Boolean(demoDayConfig.showDetailedScores),
+          description: demoDayConfig.description?.trim() || null,
+        }
+
+        const config = await tx.demoDayConfig.create({
+          data: demoDayConfigData
+        })
+
+        const eventWithConfig = await tx.event.findUnique({
+          where: { id: createdEvent.id },
+          include: {
+            demoDayConfig: true,
+            creator: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                avatar: true,
+              }
+            },
+            speakers: true,
+            _count: {
+              select: {
+                registrations: true,
+                demoDaySubmissions: true,
+              }
+            }
+          }
+        })
+
+        return eventWithConfig
+      })
+
+      logger.info('Demo day event created', {
+        eventId: event.id,
+        eventTitle: event.title,
+        workspaceId: workspaceContext.workspaceId,
+        userId: session.user.id,
+        submissionDeadline: demoDayConfig.submissionDeadline,
+        criteriaCount: Object.keys(demoDayConfig.scoringCriteria || {}).length,
+      })
+    } else {
+      event = await EventService.create(
+        workspaceContext.workspaceId,
+        eventData,
+        session.user.id
+      )
+
+      logger.info('Event created', {
+        eventId: event.id,
+        eventTitle: event.title,
+        workspaceId: workspaceContext.workspaceId,
+        userId: session.user.id,
+        isPublic: event.isPublic,
+        isVirtual: event.virtualLink ? true : false,
+      })
+    }
 
     return NextResponse.json({
       success: true,
       data: { event },
-      message: 'Event created successfully',
+      message: `${type === 'DEMO_DAY' ? 'Demo day' : 'Event'} created successfully`,
     })
   } catch (error) {
     logger.error('Error creating event', { error: error.message })

@@ -1,4 +1,4 @@
-// app/api/upload/route.js
+// app/api/upload/presigned-url/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
@@ -11,28 +11,6 @@ export async function POST(request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
-
-    // Optional: get workspace context if needed
-    // const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
-    // if (!workspaceContext) {
-    //   return NextResponse.json(
-    //     { error: { message: 'Workspace context required' } },
-    //     { status: 400 }
-    //   )
-    // }
-
-    // Optional: permission check
-    // const hasPermission = await WorkspaceContext.hasPermission(
-    //   session.user.id,
-    //   workspaceContext.workspaceId,
-    //   'files.upload'
-    // )
-    // if (!hasPermission) {
-    //   return NextResponse.json(
-    //     { error: { message: 'Insufficient permissions to upload files' } },
-    //     { status: 403 }
-    //   )
-    // }
 
     const body = await request.json()
     const { fileName, fileType, folder = 'uploads' } = body
@@ -59,13 +37,21 @@ export async function POST(request) {
       session.user.id
     )
 
+    // Fix: Return uploadUrl to match what the frontend expects
     return NextResponse.json({
       success: true,
-      data: presignedData,
+      data: {
+        uploadUrl: presignedData.presignedUrl, // ✅ Map presignedUrl to uploadUrl
+        fileUrl: presignedData.fileUrl,
+        fileKey: presignedData.fileKey,
+        fileName: presignedData.fileName,
+        originalName: presignedData.originalName,
+      },
     })
   } catch (error) {
     logger.error('Failed to generate presigned URL', {
       error: error.message,
+      stack: error.stack,
     })
 
     return NextResponse.json(

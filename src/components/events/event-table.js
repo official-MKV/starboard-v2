@@ -20,6 +20,9 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Trophy,
+  Send,
+  Award,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -42,6 +45,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PermissionWrapper } from '../permissionWrapper'
+import { DemoDaySubmissionModal } from '../demo-day/demo-day-submission-modal'
 import { formatDistanceToNow, format, isAfter, isBefore, isWithinInterval } from 'date-fns'
 import { toast } from 'sonner'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -51,7 +55,7 @@ const EVENT_TYPES = {
   MENTORING: { label: 'Mentoring', color: 'bg-green-100 text-green-800' },
   PITCH: { label: 'Pitch', color: 'bg-purple-100 text-purple-800' },
   NETWORKING: { label: 'Networking', color: 'bg-yellow-100 text-yellow-800' },
-  DEMO_DAY: { label: 'Demo Day', color: 'bg-red-100 text-red-800' },
+  DEMO_DAY: { label: 'Hackathon', color: 'bg-red-100 text-red-800' },
   BOOTCAMP: { label: 'Bootcamp', color: 'bg-indigo-100 text-indigo-800' },
   WEBINAR: { label: 'Webinar', color: 'bg-cyan-100 text-cyan-800' },
   OTHER: { label: 'Other', color: 'bg-gray-100 text-gray-800' },
@@ -62,6 +66,7 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
   const queryClient = useQueryClient()
   const [sortField, setSortField] = useState('startDate')
   const [sortDirection, setSortDirection] = useState('asc')
+  const [showSubmissionModal, setShowSubmissionModal] = useState(null)
 
   const getEventStatus = event => {
     const now = new Date()
@@ -88,8 +93,7 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
   }
 
   const sortedEvents = [...events].sort((a, b) => {
-    let aValue
-    let bValue
+    let aValue, bValue
 
     switch (sortField) {
       case 'title':
@@ -160,11 +164,7 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
     },
     onSuccess: data => {
       queryClient.invalidateQueries({ queryKey: ['events'] })
-      if (data.data.type === 'waitlist') {
-        toast.success(`Added to waitlist at position ${data.data.position}`)
-      } else {
-        toast.success('Successfully registered for event')
-      }
+      toast.success('Successfully registered for event')
     },
     onError: error => {
       toast.error(error.message)
@@ -201,24 +201,6 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
 
       if (!response.ok) {
         const errorData = await response.json()
-        if (errorData.error?.code === 'HAS_REGISTRATIONS') {
-          if (
-            confirm(
-              `This event has ${errorData.error.registrationCount} registrations. Are you sure you want to delete it?`
-            )
-          ) {
-            const forceResponse = await fetch(`/api/events/${eventId}?force=true`, {
-              method: 'DELETE',
-            })
-            if (!forceResponse.ok) {
-              const forceErrorData = await forceResponse.json()
-              throw new Error(forceErrorData.error?.message || 'Failed to delete event')
-            }
-            return forceResponse.json()
-          } else {
-            throw new Error('Deletion cancelled')
-          }
-        }
         throw new Error(errorData.error?.message || 'Failed to delete event')
       }
 
@@ -229,9 +211,7 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
       toast.success('Event deleted successfully')
     },
     onError: error => {
-      if (error.message !== 'Deletion cancelled') {
-        toast.error(error.message)
-      }
+      toast.error(error.message)
     },
   })
 
@@ -252,6 +232,10 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
     }
   }
 
+  const handleRowClick = (event) => {
+    router.push(`/events/${event.id}`)
+  }
+
   const MobileEventCard = ({ event }) => {
     const eventStatus = getEventStatus(event)
     const userRegistration = event.registrations?.find(reg => reg.user.id === currentUserId)
@@ -259,17 +243,24 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
     const isCreator = event.creator.id === currentUserId
     const isUpcoming = isAfter(new Date(event.startDate), new Date())
     const isCompleted = isBefore(new Date(event.endDate), new Date())
+    const isHackathon = event.type === 'DEMO_DAY'
+    
+    const demoDayConfig = event.demoDayConfig
+    const submissionDeadline = demoDayConfig?.submissionDeadline ? new Date(demoDayConfig.submissionDeadline) : null
+    const isSubmissionOpen = submissionDeadline ? new Date() <= submissionDeadline : false
+    const hasSubmitted = !!event.userSubmission
 
     return (
       <Card className="starboard-card mb-4">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <Badge className={`${eventStatus.color} text-white border-0`}>
                   {eventStatus.label}
                 </Badge>
                 <Badge variant="secondary" className={EVENT_TYPES[event.type]?.color}>
+                  {isHackathon && <Trophy className="w-3 h-3 mr-1" />}
                   {EVENT_TYPES[event.type]?.label}
                 </Badge>
                 {event.isPublic ? (
@@ -281,6 +272,12 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                   <Badge variant="outline">
                     <Lock className="w-3 h-3 mr-1" />
                     Private
+                  </Badge>
+                )}
+                {isHackathon && hasSubmitted && (
+                  <Badge className="bg-green-100 text-green-800">
+                    <Award className="w-3 h-3 mr-1" />
+                    Submitted
                   </Badge>
                 )}
               </div>
@@ -303,6 +300,18 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                   <ExternalLink className="w-4 h-4 mr-2" />
                   View Details
                 </DropdownMenuItem>
+                {isHackathon && (
+                  <>
+                    <DropdownMenuItem onClick={() => router.push(`/events/${event.id}?tab=submissions`)}>
+                      <Trophy className="w-4 h-4 mr-2" />
+                      View Submissions
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/events/${event.id}?tab=rankings`)}>
+                      <Award className="w-4 h-4 mr-2" />
+                      View Rankings
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <PermissionWrapper permission="events.manage">
                   {(isCreator || true) && (
                     <>
@@ -346,12 +355,26 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
           <div className="flex items-center text-sm text-gray-600">
             <Users className="w-4 h-4 mr-2" />
             <span>
-              {event._count.registrations} registered
-              {event.maxAttendees && ` / ${event.maxAttendees} max`}
+              {isHackathon ? 
+                `${event._count?.demoDaySubmissions || 0} submissions` :
+                `${event._count.registrations} registered${event.maxAttendees ? ` / ${event.maxAttendees} max` : ''}`
+              }
             </span>
           </div>
 
-          {event.speakers.length > 0 && (
+          {isHackathon && demoDayConfig && (
+            <div className="p-3 bg-red-50 rounded border border-red-200">
+              <div className="text-xs text-red-700 space-y-1">
+                <p><strong>Submission Deadline:</strong> {format(submissionDeadline, 'MMM d, h:mm a')}</p>
+                <p><strong>Max Team Size:</strong> {demoDayConfig.maxTeamSize} members</p>
+                {hasSubmitted && (
+                  <p className="text-green-700 font-medium">✓ Your submission received</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {event.speakers.length > 0 && !isHackathon && (
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">Speakers:</span>
               <div className="flex -space-x-1">
@@ -380,7 +403,7 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => router.push(`/events/${event.id}#recordings`)}
+                  onClick={() => router.push(`/events/${event.id}?tab=recordings`)}
                 >
                   <PlayCircle className="w-4 h-4 mr-1" />
                   Recordings
@@ -388,22 +411,35 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
               )}
             </div>
 
-            {!isCreator && isUpcoming && (
-              <Button
-                variant={isRegistered ? 'outline' : 'default'}
-                size="sm"
-                onClick={() => handleRegisterToggle(event)}
-                disabled={registerMutation.isPending || cancelMutation.isPending}
-                className={isRegistered ? 'text-red-600 hover:text-red-700' : ''}
-              >
-                {isRegistered ? (
-                  <UserMinus className="w-4 h-4 mr-1" />
-                ) : (
-                  <UserPlus className="w-4 h-4 mr-1" />
-                )}
-                {isRegistered ? 'Cancel' : 'Register'}
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {isHackathon && !hasSubmitted && isSubmissionOpen && (
+                <Button
+                  onClick={() => setShowSubmissionModal(event)}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  size="sm"
+                >
+                  <Send className="w-4 h-4 mr-1" />
+                  Submit
+                </Button>
+              )}
+
+              {!isCreator && isUpcoming && !isHackathon && (
+                <Button
+                  variant={isRegistered ? 'outline' : 'default'}
+                  size="sm"
+                  onClick={() => handleRegisterToggle(event)}
+                  disabled={registerMutation.isPending || cancelMutation.isPending}
+                  className={isRegistered ? 'text-red-600 hover:text-red-700' : ''}
+                >
+                  {isRegistered ? (
+                    <UserMinus className="w-4 h-4 mr-1" />
+                  ) : (
+                    <UserPlus className="w-4 h-4 mr-1" />
+                  )}
+                  {isRegistered ? 'Cancel' : 'Register'}
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -428,12 +464,12 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                 </TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>
-                  <SortButton field="registrations">Registrations</SortButton>
+                  <SortButton field="registrations">Participants</SortButton>
                 </TableHead>
                 <TableHead>
                   <SortButton field="status">Status</SortButton>
                 </TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                <TableHead className="w-[150px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -446,16 +482,25 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                 const isCreator = event.creator.id === currentUserId
                 const isUpcoming = isAfter(new Date(event.startDate), new Date())
                 const isCompleted = isBefore(new Date(event.endDate), new Date())
+                const isHackathon = event.type === 'DEMO_DAY'
+                
+                const demoDayConfig = event.demoDayConfig
+                const submissionDeadline = demoDayConfig?.submissionDeadline ? new Date(demoDayConfig.submissionDeadline) : null
+                const isSubmissionOpen = submissionDeadline ? new Date() <= submissionDeadline : false
+                const hasSubmitted = !!event.userSubmission
 
                 return (
                   <TableRow
                     key={event.id}
                     className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => router.push(`/events/${event.id}`)}
+                    onClick={() => handleRowClick(event)}
                   >
                     <TableCell>
                       <div className="space-y-1">
-                        <div className="font-medium text-gray-900">{event.title}</div>
+                        <div className="font-medium text-gray-900 flex items-center gap-2">
+                          {event.title}
+                          {isHackathon && <Trophy className="w-4 h-4 text-red-600" />}
+                        </div>
                         {event.description && (
                           <div className="text-sm text-gray-500 truncate max-w-xs">
                             {event.description}
@@ -473,7 +518,13 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                               Private
                             </Badge>
                           )}
-                          {event.speakers.length > 0 && (
+                          {isHackathon && hasSubmitted && (
+                            <Badge className="bg-green-100 text-green-800 text-xs">
+                              <Award className="w-3 h-3 mr-1" />
+                              Submitted
+                            </Badge>
+                          )}
+                          {event.speakers.length > 0 && !isHackathon && (
                             <div className="flex -space-x-1">
                               {event.speakers.slice(0, 2).map(speaker => (
                                 <Tooltip key={speaker.id}>
@@ -502,10 +553,16 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                             </div>
                           )}
                         </div>
+                        {isHackathon && demoDayConfig && (
+                          <div className="text-xs text-red-600">
+                            Deadline: {format(submissionDeadline, 'MMM d, h:mm a')}
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className={EVENT_TYPES[event.type]?.color}>
+                        {isHackathon && <Trophy className="w-3 h-3 mr-1" />}
                         {EVENT_TYPES[event.type]?.label}
                       </Badge>
                     </TableCell>
@@ -541,14 +598,22 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{event._count.registrations}</span>
-                        {event.maxAttendees && (
+                        <span className="text-sm font-medium">
+                          {isHackathon ? 
+                            (event._count?.demoDaySubmissions || 0) : 
+                            event._count.registrations
+                          }
+                        </span>
+                        {event.maxAttendees && !isHackathon && (
                           <span className="text-xs text-gray-500">/ {event.maxAttendees}</span>
                         )}
-                        {isRegistered && (
+                        {isRegistered && !isHackathon && (
                           <Badge variant="outline" className="text-xs">
                             Registered
                           </Badge>
+                        )}
+                        {isHackathon && (
+                          <span className="text-xs text-gray-500">submissions</span>
                         )}
                       </div>
                     </TableCell>
@@ -559,7 +624,18 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                        {!isCreator && isUpcoming && (
+                        {isHackathon && !hasSubmitted && isSubmissionOpen && (
+                          <Button
+                            onClick={() => setShowSubmissionModal(event)}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                            size="sm"
+                          >
+                            <Send className="w-3 h-3 mr-1" />
+                            Submit
+                          </Button>
+                        )}
+
+                        {!isCreator && isUpcoming && !isHackathon && (
                           <Button
                             variant={isRegistered ? 'outline' : 'default'}
                             size="sm"
@@ -579,7 +655,7 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => router.push(`/events/${event.id}#recordings`)}
+                            onClick={() => router.push(`/events/${event.id}?tab=recordings`)}
                           >
                             <PlayCircle className="w-3 h-3" />
                           </Button>
@@ -597,6 +673,18 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
                                 <ExternalLink className="w-4 h-4 mr-2" />
                                 View Details
                               </DropdownMenuItem>
+                              {isHackathon && (
+                                <>
+                                  <DropdownMenuItem onClick={() => router.push(`/events/${event.id}?tab=submissions`)}>
+                                    <Trophy className="w-4 h-4 mr-2" />
+                                    View Submissions
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => router.push(`/events/${event.id}?tab=rankings`)}>
+                                    <Award className="w-4 h-4 mr-2" />
+                                    View Rankings
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                               {(isCreator || true) && (
                                 <>
                                   <DropdownMenuItem onClick={() => onEdit?.(event.id)}>
@@ -631,6 +719,18 @@ export function EventTable({ events, currentUserId, onEdit, onDelete }) {
           <MobileEventCard key={event.id} event={event} />
         ))}
       </div>
+
+      {showSubmissionModal && (
+        <DemoDaySubmissionModal
+          event={showSubmissionModal}
+          onClose={() => setShowSubmissionModal(null)}
+          onSuccess={() => {
+            setShowSubmissionModal(null)
+            queryClient.invalidateQueries({ queryKey: ['events'] })
+            toast.success('Submission created successfully!')
+          }}
+        />
+      )}
     </>
   )
 }
