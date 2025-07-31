@@ -392,7 +392,7 @@ export default function EventDetailPage({ params }) {
         <div className="flex flex-wrap items-center gap-3">
           {/* Demo Day Submit Button */}
           {isDemoDay && !hasSubmitted && isSubmissionOpen && (
-            <PermissionWrapper permission="demo-day.participate">
+            <PermissionWrapper permissions={["demo-day.participate", "events.manage"]}>
               <Button
                 onClick={() => setShowSubmissionModal(true)}
                 className="bg-red-600 hover:bg-red-700 text-white font-medium"
@@ -405,7 +405,7 @@ export default function EventDetailPage({ params }) {
 
           {/* Demo Day Score Submissions Button */}
           {isDemoDay && (
-            <PermissionWrapper permission="demo-day.judge">
+            <PermissionWrapper permissions={["demo-day.judge", "events.manage"]}>
               <Button
                 variant="outline"
                 onClick={() => router.push(`/events/${eventId}/submissions`)}
