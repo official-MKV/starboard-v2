@@ -1,4 +1,3 @@
-// lib/services/invitation-service.js - CORRECTED VERSION
 import { prisma, handleDatabaseError } from '../database.js'
 import { logger } from '../logger.js'
 import { generateId } from '../utils.js'
@@ -7,18 +6,7 @@ import { EmailVariableParser } from '../utils/email-variables.js'
 import bcrypt from 'bcryptjs'
 import EmailService from './email-service.js'
 
-/**
- * CORRECTED Invitation Management Service
- * Fixed to match actual UserInvitation schema
- */
 export class InvitationService {
-  /**
-   * Send workspace invitation - CORRECTED
-   * @param {string} workspaceId - Workspace ID
-   * @param {Object} invitationData - Invitation data with variableData
-   * @param {string} invitedBy - Inviter user ID
-   * @returns {Object} - Created invitation
-   */
   static async create(workspaceId, invitationData, invitedBy) {
     try {
       if (!invitationData.email || !invitationData.roleId) {
@@ -121,7 +109,7 @@ export class InvitationService {
               onboarding: true,
             },
           },
-          template: true, // FIXED: Include the template
+          template: true,
         },
       })
 
@@ -146,9 +134,66 @@ export class InvitationService {
     }
   }
 
-  /**
-   * Get invitation by token - FIXED to properly structure onboarding data
-   */
+  static async validateBulkInvitation(workspaceId, emails, roleId) {
+    const results = {
+      valid: [],
+      invalid: []
+    }
+
+    for (const email of emails) {
+      try {
+        const existingMember = await prisma.workspaceMember.findFirst({
+          where: {
+            workspaceId,
+            user: { email: email.toLowerCase() }
+          },
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+            role: { select: { name: true } }
+          }
+        })
+
+        if (existingMember) {
+          results.invalid.push({
+            email,
+            error: 'USER_EXISTS',
+            message: `${existingMember.user.firstName} ${existingMember.user.lastName} is already a member with role "${existingMember.role.name}"`
+          })
+          continue
+        }
+
+        const existingInvitation = await prisma.userInvitation.findFirst({
+          where: {
+            workspaceId,
+            email: email.toLowerCase(),
+            isAccepted: false,
+            expiresAt: { gt: new Date() }
+          },
+          include: { role: { select: { name: true } } }
+        })
+
+        if (existingInvitation) {
+          results.invalid.push({
+            email,
+            error: 'INVITATION_EXISTS', 
+            message: `Active invitation already exists for "${existingInvitation.role.name}" role`
+          })
+          continue
+        }
+
+        results.valid.push(email)
+      } catch (error) {
+        results.invalid.push({
+          email,
+          error: 'VALIDATION_ERROR',
+          message: error.message
+        })
+      }
+    }
+
+    return results
+  }
+
   static async findByToken(token) {
     try {
       const invitation = await prisma.userInvitation.findUnique({
@@ -170,7 +215,7 @@ export class InvitationService {
               description: true,
               color: true,
               requiresOnboarding: true,
-              onboardingForm: true, // JSON field from role
+              onboardingForm: true,
             },
           },
           onboardingFlow: {
@@ -198,10 +243,8 @@ export class InvitationService {
         return null
       }
 
-      // FIXED: Properly structure onboarding form data
       let onboardingForm = null
 
-      // Priority: OnboardingFlow > Role.onboardingForm
       if (invitation.onboardingFlow && invitation.onboardingFlow.customFields) {
         onboardingForm = {
           fields: invitation.onboardingFlow.customFields,
@@ -213,20 +256,16 @@ export class InvitationService {
         onboardingForm = invitation.role.onboardingForm
       }
 
-      // FIXED: Return properly structured data
       return {
         ...invitation,
         requiresOnboarding: invitation.role.requiresOnboarding,
-        onboardingForm, // This is what the React component expects
+        onboardingForm,
       }
     } catch (error) {
       throw handleDatabaseError(error)
     }
   }
 
-  /**
-   * Send invitation email - FIXED to use linked template
-   */
   static async sendInvitationEmail(invitation, inviter, variableData = {}) {
     try {
       let template = invitation.template
@@ -252,9 +291,8 @@ The {{workspace_name}} Team`,
         }
       }
 
-      // Prepare template variables
       const templateVariables = {
-        first_name: invitation.email.split('@')[0], // Fallback if name not provided
+        first_name: invitation.email.split('@')[0],
         last_name: '',
         email: invitation.email,
         workspace_name: invitation.workspace.name,
@@ -264,7 +302,7 @@ The {{workspace_name}} Team`,
         invitation_link: `${process.env.NEXTAUTH_URL}/invitations/accept/${invitation.token}`,
         expiry_date: invitation.expiresAt.toLocaleDateString(),
         personal_message: invitation.personalMessage || '',
-        ...variableData, // Override with provided data
+        ...variableData,
       }
 
       try {
@@ -295,9 +333,6 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Count invitations by workspace with filtering
-   */
   static async countByWorkspace(workspaceId, options = {}) {
     try {
       const { status = 'all', roleId = null, search = '' } = options
@@ -313,7 +348,6 @@ The {{workspace_name}} Team`,
         }),
       }
 
-      // Apply status filter
       if (status === 'PENDING') {
         where.isAccepted = false
         where.expiresAt = { gt: new Date() }
@@ -330,6 +364,7 @@ The {{workspace_name}} Team`,
       throw handleDatabaseError(error)
     }
   }
+
   static async bulkCreate(options) {
     try {
       const {
@@ -355,7 +390,7 @@ The {{workspace_name}} Team`,
               email,
               roleId,
               personalMessage: message,
-              variableData: {}, // You might want to collect this per email
+              variableData: {},
             },
             inviterId
           )
@@ -379,9 +414,6 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Get workspace invitations - CORRECTED model name
-   */
   static async findByWorkspace(workspaceId, options = {}) {
     try {
       const { status = 'all', roleId = null, search = '', limit = 50, offset = 0 } = options
@@ -397,7 +429,6 @@ The {{workspace_name}} Team`,
         }),
       }
 
-      // Apply status filter
       if (status === 'PENDING') {
         where.isAccepted = false
         where.expiresAt = { gt: new Date() }
@@ -430,7 +461,7 @@ The {{workspace_name}} Team`,
             },
           },
         },
-        orderBy: { sentAt: 'desc' }, // CORRECTED: using sentAt instead of createdAt
+        orderBy: { sentAt: 'desc' },
         skip: offset,
         take: limit,
       })
@@ -441,60 +472,6 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Get invitation by token - CORRECTED model name
-   */
-  static async findByToken(token) {
-    try {
-      return await prisma.userInvitation.findUnique({
-        where: { token },
-        include: {
-          workspace: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              description: true,
-              logo: true,
-            },
-          },
-          role: {
-            include: {
-              onboarding: {
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                  customFields: true,
-                  requireTermsAccept: true,
-                  termsAndConditions: true,
-                  settings: true,
-                },
-              },
-            },
-          },
-          onboardingFlow: {
-            // Direct reference to onboarding flow
-            select: {
-              id: true,
-              name: true,
-              description: true,
-              customFields: true,
-              requireTermsAccept: true,
-              termsAndConditions: true,
-              settings: true,
-            },
-          },
-        },
-      })
-    } catch (error) {
-      throw handleDatabaseError(error)
-    }
-  }
-
-  /**
-   * Accept invitation - CORRECTED
-   */
   static async accept(token, userData) {
     try {
       const invitation = await this.findByToken(token)
@@ -527,15 +504,12 @@ The {{workspace_name}} Team`,
             password: hashedPassword,
             isActive: true,
             isVerified: true,
-            // Set onboarding status based on role requirements
             isOnboardingCompleted: !invitation.role.requiresOnboarding,
           },
         })
       }
 
-      // Add user to workspace and mark invitation as accepted
       await prisma.$transaction(async tx => {
-        // Create workspace membership
         await tx.workspaceMember.create({
           data: {
             workspaceId: invitation.workspaceId,
@@ -547,7 +521,6 @@ The {{workspace_name}} Team`,
           },
         })
 
-        // Mark invitation as accepted - CORRECTED field name
         await tx.userInvitation.update({
           where: { id: invitation.id },
           data: {
@@ -556,7 +529,6 @@ The {{workspace_name}} Team`,
           },
         })
 
-        // Create onboarding completion record if needed
         if (invitation.role.requiresOnboarding && invitation.onboardingFlowId) {
           await tx.onboardingCompletion.create({
             data: {
@@ -590,102 +562,6 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Send invitation email - CORRECTED
-   */
-
-  //   static async sendInvitationEmail(invitation, inviter, variableData = {}) {
-  //     try {
-  //       let template = await prisma.emailTemplate.findFirst({
-  //         where: {
-  //           workspaceId: invitation.workspaceId,
-  //           type: 'INVITATION',
-  //           isActive: true,
-  //         },
-  //         orderBy: { isDefault: 'desc' },
-  //       })
-
-  //       // Fall back to system default template
-  //       if (!template) {
-  //         template = {
-  //           subject: "You're invited to join !{{workspace_name}}",
-  //           content: `Hello !{{first_name}},
-
-  //  !{{inviter_name}} has invited you to join !{{workspace_name}} as a {{role_name}}.
-
-  //  {{personal_message}}
-
-  //  Click the link below to accept your invitation:
-  //  !{{invitation_link}}
-
-  //  This invitation expires on {{expiry_date}}.
-
-  //  Best regards,
-  //  The {{workspace_name}} Team`,
-  //           requiredVariables: ['first_name', 'workspace_name', 'inviter_name', 'invitation_link'],
-  //           optionalVariables: ['role_name', 'personal_message', 'expiry_date'],
-  //         }
-  //       }
-
-  //       // Prepare template variables
-  //       const templateVariables = {
-  //         first_name: invitation.email.split('@')[0], // Fallback if name not provided
-  //         last_name: '',
-  //         email: invitation.email,
-  //         workspace_name: invitation.workspace.name,
-  //         workspace_logo: invitation.workspace.logo || '',
-  //         role_name: invitation.role.name,
-  //         inviter_name: `${inviter.firstName} ${inviter.lastName}`,
-  //         invitation_link: `${process.env.NEXTAUTH_URL}/invitations/accept/${invitation.token}`,
-  //         expiry_date: invitation.expiresAt.toLocaleDateString(),
-  //         personal_message: invitation.personalMessage || '',
-  //         ...variableData, // Override with provided data
-  //       }
-
-  //       // UPDATED: Actually send the email using EmailService
-  //       try {
-  //         await EmailService.sendTemplatedEmail(template, templateVariables, invitation.email)
-
-  //         // Update invitation to mark email as sent
-  //         await prisma.userInvitation.update({
-  //           where: { id: invitation.id },
-  //           data: {
-  //             // Note: Your schema doesn't have emailSent fields, so we just log it
-  //             // If you want to track email status, add these fields to your schema:
-  //             // emailSent: true,
-  //             // emailSentAt: new Date(),
-  //           },
-  //         })
-
-  //         logger.info('Invitation email sent successfully', {
-  //           invitationId: invitation.id,
-  //           email: invitation.email,
-  //           templateId: template.id || 'system',
-  //         })
-
-  //         return true
-  //       } catch (emailError) {
-  //         // Log email error but don't fail the invitation creation
-  //         logger.error('Failed to send invitation email', {
-  //           invitationId: invitation.id,
-  //           email: invitation.email,
-  //           error: emailError.message,
-  //         })
-
-  //         // In production, you might want to queue this for retry
-  //         throw emailError
-  //       }
-  //     } catch (error) {
-  //       logger.error('Error in sendInvitationEmail', {
-  //         invitationId: invitation.id,
-  //         error: error.message,
-  //       })
-  //       throw error
-  //     }
-  //   }
-  /**
-   * Get required variables for role's email template
-   */
   static async getRequiredVariables(roleId) {
     try {
       const role = await prisma.role.findUnique({
@@ -713,14 +589,12 @@ The {{workspace_name}} Team`,
       let template = role.workspace.emailTemplates[0]
 
       if (!template) {
-        // Return basic required variables if no template
         return [
           { name: 'first_name', required: true, label: 'First Name', type: 'text' },
           { name: 'inviter_name', required: true, label: 'Your Name', type: 'text' },
         ]
       }
 
-      // Parse variables from template
       const requiredVars = template.requiredVariables || []
       const optionalVars = template.optionalVariables || []
 
@@ -743,17 +617,10 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Resend invitation - CORRECTED model name
-   */
-  /**
-   * Resend invitation with preserved template variables
-   */
   static async resend(invitationId, options = {}) {
     try {
       const { extendExpiry = false, resentBy } = options
 
-      // Get the invitation with ALL data including variableData
       const invitation = await prisma.userInvitation.findUnique({
         where: { id: invitationId },
         include: {
@@ -779,16 +646,14 @@ The {{workspace_name}} Team`,
         throw new Error('Cannot resend accepted invitation')
       }
 
-      // Calculate new expiry date if needed
       let newExpiresAt = invitation.expiresAt
       const isExpired = new Date() > new Date(invitation.expiresAt)
 
       if (extendExpiry || isExpired) {
         newExpiresAt = new Date()
-        newExpiresAt.setDate(newExpiresAt.getDate() + 7) // Extend by 7 days
+        newExpiresAt.setDate(newExpiresAt.getDate() + 7)
       }
 
-      // Get the resender's details if provided
       let emailSender = invitation.sender
       if (resentBy && resentBy !== invitation.sender?.id) {
         const resender = await prisma.user.findUnique({
@@ -804,7 +669,6 @@ The {{workspace_name}} Team`,
         }
       }
 
-      // Update the invitation with new expiry
       const updatedInvitation = await prisma.userInvitation.update({
         where: { id: invitationId },
         data: {
@@ -818,11 +682,10 @@ The {{workspace_name}} Team`,
         },
       })
 
-      // Send the email using the ORIGINAL variableData
       await this.sendInvitationEmail(
         updatedInvitation,
         emailSender,
-        invitation.variableData || {} // Use original variableData!
+        invitation.variableData || {}
       )
 
       return updatedInvitation
@@ -830,11 +693,6 @@ The {{workspace_name}} Team`,
       throw handleDatabaseError(error)
     }
   }
-  /*
-   * Get invitation by ID
-   * @param {string} invitationId - Invitation ID
-   * @param {Object} options - Query options
-   * @returns {Object|null} - Invitation details */
 
   static async findById(invitationId, options = {}) {
     try {
@@ -891,7 +749,6 @@ The {{workspace_name}} Team`,
         }
       }
 
-      // Include onboarding flow if it exists
       include.onboardingFlow = {
         select: {
           id: true,
@@ -913,7 +770,6 @@ The {{workspace_name}} Team`,
         return null
       }
 
-      // Add computed properties
       const now = new Date()
       const isExpired = invitation.expiresAt < now
       const isPending = !invitation.isAccepted && !isExpired
@@ -933,11 +789,6 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Check if invitation exists and is valid
-   * @param {string} invitationId - Invitation ID
-   * @returns {Object} - Validation result
-   */
   static async validateInvitation(invitationId) {
     try {
       const invitation = await this.findById(invitationId, {
@@ -985,11 +836,6 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Get invitation with full details for admin operations
-   * @param {string} invitationId - Invitation ID
-   * @returns {Object|null} - Full invitation details
-   */
   static async findByIdForAdmin(invitationId) {
     try {
       const invitation = await this.findById(invitationId, {
@@ -1002,9 +848,7 @@ The {{workspace_name}} Team`,
         return null
       }
 
-      // Add additional admin-specific data
       const [memberExists, relatedInvitations] = await Promise.all([
-        // Check if user is already a member
         prisma.user.findUnique({
           where: { email: invitation.email },
           include: {
@@ -1024,7 +868,6 @@ The {{workspace_name}} Team`,
             },
           },
         }),
-        // Get other invitations for the same email in this workspace
         prisma.userInvitation.findMany({
           where: {
             workspaceId: invitation.workspaceId,
@@ -1056,17 +899,10 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Update invitation data (for admin operations)
-   * @param {string} invitationId - Invitation ID
-   * @param {Object} updateData - Data to update
-   * @returns {Object} - Updated invitation
-   */
   static async updateById(invitationId, updateData) {
     try {
       const { personalMessage, variableData, expiresAt } = updateData
 
-      // Validate invitation exists and can be updated
       const validation = await this.validateInvitation(invitationId)
       if (!validation.valid) {
         throw new Error(validation.error)
@@ -1126,9 +962,6 @@ The {{workspace_name}} Team`,
     }
   }
 
-  /**
-   * Cancel invitation - CORRECTED model name
-   */
   static async cancel(invitationId) {
     try {
       const invitation = await prisma.userInvitation.findUnique({
@@ -1158,11 +991,7 @@ The {{workspace_name}} Team`,
       throw handleDatabaseError(error)
     }
   }
-  /**
-   * Get invitation statistics for a workspace
-   * @param {string} workspaceId - Workspace ID
-   * @returns {Object} statistics
-   */
+
   static async getStatistics(workspaceId) {
     try {
       const now = new Date()
@@ -1205,13 +1034,13 @@ The {{workspace_name}} Team`,
   }
 }
 
-// Export convenience methods
 export const {
   create,
-  findById, // NEW
-  findByIdForAdmin, // NEW
-  validateInvitation, // NEW
-  updateById, // NEW
+  findById,
+  findByIdForAdmin,
+  validateInvitation,
+  updateById,
+  validateBulkInvitation,
   findByWorkspace,
   findByToken,
   accept,

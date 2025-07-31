@@ -19,7 +19,7 @@ export const authConfig = {
             return null
           }
 
-          // Find user by email
+        
           const user = await userService.findByEmail(credentials.email)
 
           if (!user) {

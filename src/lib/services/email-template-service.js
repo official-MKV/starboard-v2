@@ -1,28 +1,14 @@
-// lib/services/email-template-service.js - COMPLETE CORRECTED VERSION
 import { prisma, handleDatabaseError } from '../database.js'
 import { logger } from '../logger.js'
 import { EmailVariableParser } from '../utils/email-variables.js'
 
-/**
- * Email Template Management Service
- * Handles template CRUD operations and variable parsing
- */
 export class EmailTemplateService {
-  /**
-   * Create email template
-   * @param {string} workspaceId - Workspace ID
-   * @param {Object} templateData - Template data
-   * @param {string} creatorId - Creator user ID
-   * @returns {Object} - Created template
-   */
   static async create(workspaceId, templateData, creatorId) {
     try {
-      // Parse variables from content
       const { required, optional } = EmailVariableParser.extractVariables(
         templateData.content || ''
       )
 
-      // Validate template content
       const validation = EmailVariableParser.validateTemplate(templateData.content || '')
       if (!validation.valid) {
         throw new Error(`Template validation failed: ${validation.errors.join(', ')}`)
@@ -71,38 +57,24 @@ export class EmailTemplateService {
     }
   }
 
-  /**
-   * Get workspace statistics - CORRECTED
-   * @param {string} workspaceId - Workspace ID
-   * @param {Object} options - Query options
-   * @returns {Object} - Statistics
-   */
   static async getStatistics(workspaceId, options = {}) {
     try {
       const where = { workspaceId }
 
-      // Get total templates count
       const totalTemplates = await prisma.emailTemplate.count({ where })
-
-      // Get active/inactive counts
       const activeTemplates = await prisma.emailTemplate.count({
         where: { ...where, isActive: true },
       })
-
       const inactiveTemplates = await prisma.emailTemplate.count({
         where: { ...where, isActive: false },
       })
-
-      // Get default templates count
       const defaultTemplates = await prisma.emailTemplate.count({
         where: { ...where, isDefault: true },
       })
-
       const customTemplates = await prisma.emailTemplate.count({
         where: { ...where, isDefault: false },
       })
 
-      // Get templates by type
       const templatesByType = await prisma.emailTemplate.groupBy({
         by: ['type'],
         where,
@@ -111,13 +83,11 @@ export class EmailTemplateService {
         },
       })
 
-      // Transform type stats into object
       const typeStats = templatesByType.reduce((acc, item) => {
         acc[item.type] = item._count.id
         return acc
       }, {})
 
-      // Get recently created templates (last 30 days)
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
@@ -130,7 +100,6 @@ export class EmailTemplateService {
         },
       })
 
-      // Get most recently updated template
       const lastUpdatedTemplate = await prisma.emailTemplate.findFirst({
         where,
         orderBy: {
@@ -148,9 +117,9 @@ export class EmailTemplateService {
         totalTemplates,
         activeTemplates,
         inactiveTemplates,
-        defaultTemplates, // Changed from systemTemplates
+        defaultTemplates,
         customTemplates,
-        recentTemplates, // Created in last 30 days
+        recentTemplates,
         templatesByType: typeStats,
         lastUpdatedTemplate,
         utilizationRate:
@@ -161,12 +130,6 @@ export class EmailTemplateService {
     }
   }
 
-  /**
-   * Get templates for workspace - CORRECTED
-   * @param {string} workspaceId - Workspace ID
-   * @param {Object} options - Query options
-   * @returns {Array} - Templates
-   */
   static async findByWorkspace(workspaceId, options = {}) {
     try {
       const { type, isActive } = options
@@ -200,11 +163,6 @@ export class EmailTemplateService {
     }
   }
 
-  /**
-   * Get template by ID - CORRECTED
-   * @param {string} templateId - Template ID
-   * @returns {Object|null} - Template
-   */
   static async findById(templateId) {
     try {
       return await prisma.emailTemplate.findUnique({
@@ -235,15 +193,8 @@ export class EmailTemplateService {
     }
   }
 
-  /**
-   * Update template - CORRECTED
-   * @param {string} templateId - Template ID
-   * @param {Object} updates - Updates
-   * @returns {Object} - Updated template
-   */
   static async update(templateId, updates) {
     try {
-      // If content is being updated, re-parse variables
       if (updates.content) {
         const { required, optional } = EmailVariableParser.extractVariables(updates.content)
         const validation = EmailVariableParser.validateTemplate(updates.content)
@@ -284,11 +235,6 @@ export class EmailTemplateService {
     }
   }
 
-  /**
-   * Delete template - CORRECTED
-   * @param {string} templateId - Template ID
-   * @returns {boolean} - Success
-   */
   static async delete(templateId) {
     try {
       const template = await prisma.emailTemplate.findUnique({
@@ -315,10 +261,6 @@ export class EmailTemplateService {
     }
   }
 
-  /**
-   * Get template types
-   * @returns {Array} - Available template types
-   */
   static getTemplateTypes() {
     return [
       {
@@ -390,11 +332,6 @@ export class EmailTemplateService {
     ]
   }
 
-  /**
-   * Get default template content for type
-   * @param {string} type - Template type
-   * @returns {Object} - Default template
-   */
   static getDefaultTemplate(type) {
     const templates = {
       INVITATION: {
@@ -482,13 +419,6 @@ The {{workspace_name}} Team
     return templates[type] || templates.CUSTOM
   }
 
-  /**
-   * Render template with variables
-   * @param {Object} template - Template object
-   * @param {Object} variables - Variable values
-   * @param {boolean} strict - Throw on missing required variables
-   * @returns {Object} - Rendered content
-   */
   static renderTemplate(template, variables = {}, strict = true) {
     try {
       const renderedContent = EmailVariableParser.replaceVariables(
@@ -518,37 +448,19 @@ The {{workspace_name}} Team
     }
   }
 
-  /**
-   * Preview template with sample data
-   * @param {Object} template - Template object
-   * @returns {Object} - Preview content
-   */
   static previewTemplate(template) {
     const sampleData = EmailVariableParser.generateSampleData(template.content)
     return this.renderTemplate(template, sampleData, false)
   }
 
-  /**
-   * Validate template variables against provided data
-   * @param {Object} template - Template object
-   * @param {Object} variables - Variable values
-   * @returns {Object} - Validation result
-   */
   static validateTemplateVariables(template, variables) {
     return EmailVariableParser.validateRequiredVariables(template.content, variables)
   }
 
-  /**
-   * Get template usage statistics - CORRECTED
-   * @param {string} templateId - Template ID
-   * @param {Object} dateRange - Date range filter
-   * @returns {Object} - Usage statistics
-   */
   static async getUsageStatistics(templateId, dateRange = {}) {
     try {
       const { startDate, endDate } = dateRange
 
-      // Get actual invitation count for this template
       const invitationCount = await prisma.userInvitation.count({
         where: {
           templateId: templateId,
@@ -561,7 +473,6 @@ The {{workspace_name}} Team
         },
       })
 
-      // Get last used date
       const lastInvitation = await prisma.userInvitation.findFirst({
         where: { templateId },
         orderBy: { createdAt: 'desc' },
@@ -570,40 +481,27 @@ The {{workspace_name}} Team
 
       return {
         totalSent: invitationCount,
-        successRate: invitationCount > 0 ? 95 : 0, // Estimate
-        openRate: 0, // Would need email tracking
-        clickRate: 0, // Would need email tracking
+        successRate: invitationCount > 0 ? 95 : 0,
+        openRate: 0,
+        clickRate: 0,
         lastUsed: lastInvitation?.createdAt || null,
-        peakUsagePeriod: null, // Could implement with date analysis
+        peakUsagePeriod: null,
       }
     } catch (error) {
       throw handleDatabaseError(error)
     }
   }
 
-  /**
-   * Convert plain text to basic HTML
-   * @param {string} text - Plain text content
-   * @returns {string} - HTML content
-   */
   static convertToHtml(text) {
     if (!text) return ''
 
     return text
-      .replace(/\n\n/g, '</p><p>') // Double newlines become paragraphs
-      .replace(/\n/g, '<br>') // Single newlines become breaks
-      .replace(/^/, '<p>') // Start with paragraph
-      .replace(/$/, '</p>') // End with paragraph
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>')
+      .replace(/^/, '<p>')
+      .replace(/$/, '</p>')
   }
 
-  /**
-   * Duplicate template with new name - CORRECTED
-   * @param {string} templateId - Template ID to duplicate
-   * @param {string} newName - New template name
-   * @param {string} workspaceId - Target workspace ID (optional)
-   * @param {string} createdBy - User ID who creates the duplicate
-   * @returns {Object} - Duplicated template
-   */
   static async duplicate(templateId, newName, workspaceId = null, createdBy) {
     try {
       const originalTemplate = await prisma.emailTemplate.findUnique({
@@ -627,7 +525,7 @@ The {{workspace_name}} Team
           requiredVariables: originalTemplate.requiredVariables,
           optionalVariables: originalTemplate.optionalVariables,
           isActive: originalTemplate.isActive,
-          isDefault: false, // Never duplicate as default
+          isDefault: false,
           createdBy: createdBy || originalTemplate.createdBy,
         },
         include: {
@@ -655,12 +553,6 @@ The {{workspace_name}} Team
     }
   }
 
-  /**
-   * Create default templates for workspace - CORRECTED
-   * @param {string} workspaceId - Workspace ID (required)
-   * @param {string} createdBy - User ID who creates the templates
-   * @returns {Array} - Created templates
-   */
   static async createDefaultTemplates(workspaceId, createdBy) {
     try {
       if (!workspaceId || !createdBy) {
@@ -671,7 +563,7 @@ The {{workspace_name}} Team
       const createdTemplates = []
 
       for (const typeInfo of templateTypes) {
-        if (typeInfo.type === 'CUSTOM') continue // Skip custom type
+        if (typeInfo.type === 'CUSTOM') continue
 
         try {
           const defaultTemplate = this.getDefaultTemplate(typeInfo.type)
@@ -697,7 +589,6 @@ The {{workspace_name}} Team
 
           createdTemplates.push(template)
         } catch (error) {
-          // Template might already exist, skip
           logger.warn('Default template creation skipped', {
             type: typeInfo.type,
             error: error.message,
@@ -715,7 +606,6 @@ The {{workspace_name}} Team
     try {
       let template = null
 
-      // If specific template ID provided, use that
       if (templateId) {
         template = await prisma.emailTemplate.findUnique({
           where: { id: templateId },
@@ -740,7 +630,10 @@ The {{workspace_name}} Team
               workspaceId,
               type: 'INVITATION',
               isActive: true,
-              name: { contains: role.name },
+              OR: [
+                { name: `${role.name} Invitation` },
+                { name: { contains: role.name } }
+              ]
             },
             select: {
               id: true,
@@ -754,7 +647,6 @@ The {{workspace_name}} Team
           })
         }
 
-        // Fallback to default template if no role-specific template
         if (!template) {
           template = await prisma.emailTemplate.findFirst({
             where: {
@@ -775,7 +667,6 @@ The {{workspace_name}} Team
         }
       }
 
-      // If no template found, return built-in variables only
       if (!template) {
         return {
           template: null,
@@ -795,13 +686,9 @@ The {{workspace_name}} Team
         }
       }
 
-      // Extract variables from template content using EmailVariableParser
       const extractedVariables = EmailVariableParser.extractVariables(template.content)
-
-      // Get variable metadata (if needed for additional info like types, descriptions)
       const variableInfo = EmailVariableParser.getVariableInfo(template.content)
 
-      // Filter out built-in variables that are automatically provided
       const builtInVariables = [
         'workspace_name',
         'workspace_logo',
@@ -878,11 +765,6 @@ The {{workspace_name}} Team
     }
   }
 
-  /**
-   * Get variables for role's default template
-   * @param {string} roleId - Role ID
-   * @returns {Object} - Template variables
-   */
   static async getVariablesForRole(roleId) {
     try {
       const role = await prisma.role.findUnique({
@@ -903,12 +785,6 @@ The {{workspace_name}} Team
     }
   }
 
-  /**
-   * Preview template with variables
-   * @param {string} templateId - Template ID
-   * @param {Object} variableData - Variable values
-   * @returns {Object} - Rendered template preview
-   */
   static async previewTemplateWithVariables(templateId, variableData = {}) {
     try {
       const template = await this.findById(templateId)
@@ -916,7 +792,6 @@ The {{workspace_name}} Team
         throw new Error('Template not found')
       }
 
-      // Add built-in sample variables
       const sampleVariables = {
         workspace_name: 'Acme Workspace',
         inviter_name: 'John Smith',
@@ -926,14 +801,13 @@ The {{workspace_name}} Team
         first_name: 'Jane',
         last_name: 'Doe',
         email: 'jane@example.com',
-        ...variableData, // Override with provided data
+        ...variableData,
       }
 
-      // Use EmailVariableParser to render the template
       const rendered = EmailVariableParser.replaceVariables(
         template.content,
         sampleVariables,
-        false // Don't throw on missing variables for preview
+        false
       )
 
       const renderedSubject = EmailVariableParser.replaceVariables(
@@ -954,7 +828,6 @@ The {{workspace_name}} Team
   }
 }
 
-// Export convenience methods
 export const {
   create,
   findByWorkspace,

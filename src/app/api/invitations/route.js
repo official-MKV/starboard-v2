@@ -1,11 +1,9 @@
-// app/api/invitations/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
 import { InvitationService } from '@/lib/services/invitation-service'
 import { logger } from '@/lib/logger'
 
-// Helper function to compute invitation status
 const computeInvitationStatus = invitation => {
   if (invitation.isAccepted) {
     return 'ACCEPTED'
@@ -52,7 +50,6 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get('limit')) || 20
     const offset = (page - 1) * limit
 
-    // FIXED: Get both invitations and count
     const [rawInvitations, totalCount] = await Promise.all([
       InvitationService.findByWorkspace(workspaceContext.workspaceId, {
         status,
@@ -80,7 +77,7 @@ export async function GET(request) {
     const pagination = {
       currentPage: page,
       totalPages,
-      totalItems: totalCount, // This was missing!
+      totalItems: totalCount,
       itemsPerPage: limit,
       hasNextPage,
       hasPreviousPage,
@@ -104,6 +101,7 @@ export async function GET(request) {
     )
   }
 }
+
 export async function POST(request) {
   try {
     const session = await auth()
@@ -136,7 +134,6 @@ export async function POST(request) {
     const { email, emails, roleId, personalMessage, variableData = {}, expiresInDays = 7 } = body
 
     const emailList = emails || [email]
-
     if (!emailList || emailList.length === 0) {
       return NextResponse.json(
         { error: { message: 'At least one email address is required' } },
@@ -153,83 +150,119 @@ export async function POST(request) {
 
     if (invalidEmails.length > 0) {
       return NextResponse.json(
-        { error: { message: `Invalid email addresses: ${invalidEmails.join(', ')}` } },
+        { 
+          error: { 
+            message: `Invalid email format: ${invalidEmails.join(', ')}`,
+            code: 'INVALID_EMAIL_FORMAT',
+            invalidEmails 
+          } 
+        },
         { status: 400 }
       )
     }
 
     const cleanEmails = [...new Set(emailList.map(email => email.trim().toLowerCase()))]
 
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + expiresInDays)
+    const validation = await InvitationService.validateBulkInvitation(
+      workspaceContext.workspaceId, 
+      cleanEmails, 
+      roleId
+    )
 
-    if (cleanEmails.length === 1) {
-      const rawInvitation = await InvitationService.create(
-        workspaceContext.workspaceId,
-        {
-          email: cleanEmails[0],
-          roleId,
-          personalMessage,
-          variableData,
+    if (validation.invalid.length > 0 && validation.valid.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: { 
+          message: 'No valid emails to invite',
+          code: 'ALL_INVALID'
         },
-        session.user.id
-      )
-
-      // Add computed status to the response
-      const invitation = {
-        ...rawInvitation,
-        status: computeInvitationStatus(rawInvitation),
-      }
-
-      return NextResponse.json({
-        success: true,
-        data: { invitation },
-        message: 'Invitation sent successfully',
-      })
-    } else {
-      const results = await InvitationService.bulkCreate({
-        workspaceId: workspaceContext.workspaceId,
-        emails: cleanEmails,
-        roleId,
-        inviterId: session.user.id,
-        message: personalMessage,
-        expiresAt,
-        sendEmail: true,
-      })
-
-      // Add computed status to successful invitations
-      const successful = results.successful.map(invitation => ({
-        ...invitation,
-        status: computeInvitationStatus(invitation),
-      }))
-
-      logger.info('Bulk invitations processed', {
-        workspaceId: workspaceContext.workspaceId,
-        inviterId: session.user.id,
-        roleId,
-        emailCount: cleanEmails.length,
-        successCount: results.successful.length,
-        errorCount: results.failed.length,
-      })
-
-      return NextResponse.json({
-        success: true,
         data: {
-          successful,
-          failed: results.failed,
+          failed: validation.invalid,
           summary: {
             total: cleanEmails.length,
-            successful: results.successful.length,
-            failed: results.failed.length,
-          },
-        },
-        message: `${results.successful.length} invitation(s) sent successfully`,
-      })
+            successful: 0,
+            failed: validation.invalid.length
+          }
+        }
+      }, { status: 400 })
     }
+
+    const results = { successful: [], failed: validation.invalid }
+
+    for (const email of validation.valid) {
+      try {
+        const invitation = await InvitationService.create(
+          workspaceContext.workspaceId,
+          {
+            email,
+            roleId, 
+            personalMessage,
+            variableData,
+          },
+          session.user.id
+        )
+
+        results.successful.push({
+          ...invitation,
+          status: computeInvitationStatus(invitation)
+        })
+      } catch (error) {
+        results.failed.push({
+          email,
+          error: 'CREATION_FAILED',
+          message: error.message
+        })
+      }
+    }
+
+    const response = {
+      success: results.successful.length > 0,
+      data: {
+        successful: results.successful,
+        failed: results.failed,
+        summary: {
+          total: cleanEmails.length,
+          successful: results.successful.length,
+          failed: results.failed.length
+        }
+      }
+    }
+
+    if (results.successful.length === 0) {
+      response.message = 'No invitations were sent'
+    } else if (results.failed.length === 0) {
+      response.message = `All ${results.successful.length} invitations sent successfully`
+    } else {
+      response.message = `${results.successful.length} of ${cleanEmails.length} invitations sent successfully`
+    }
+
+    logger.info('Bulk invitations processed', {
+      workspaceId: workspaceContext.workspaceId,
+      inviterId: session.user.id,
+      roleId,
+      total: cleanEmails.length,
+      successful: results.successful.length,
+      failed: results.failed.length,
+      failureReasons: results.failed.map(f => f.error)
+    })
+
+    return NextResponse.json(response, { 
+      status: results.successful.length > 0 ? 200 : 400 
+    })
+
   } catch (error) {
-    logger.error('Error creating invitations', { error: error.message })
+    logger.error('Invitation API error', { 
+      error: error.message,
+      stack: error.stack 
+    })
+    
     return NextResponse.json(
-      { error: { message: error.message || 'Failed to create invitations' } },
+      { 
+        error: { 
+          message: 'An unexpected error occurred while processing invitations',
+          code: 'INTERNAL_ERROR'
+        } 
+      },
       { status: 500 }
     )
   }

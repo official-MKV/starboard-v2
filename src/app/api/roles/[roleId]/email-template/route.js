@@ -34,34 +34,49 @@ export async function GET(request, { params }) {
 
     const { roleId } = params
 
-    // Get template variables for this role
-    const result = await EmailTemplateService.getTemplateVariables(
-      null, // templateId
-      roleId, // roleId
-      workspaceContext.workspaceId
-    )
+    try {
+      const result = await EmailTemplateService.getTemplateVariables(
+        null,
+        roleId,
+        workspaceContext.workspaceId
+      )
 
-    logger.info('Role template fetched', {
-      roleId,
-      workspaceId: workspaceContext.workspaceId,
-      userId: session.user.id,
-      templateFound: !!result.template,
-      requiredCount: result.variables.required.length,
-      optionalCount: result.variables.optional.length,
-    })
+      logger.info('Role template variables fetched', {
+        roleId,
+        workspaceId: workspaceContext.workspaceId,
+        userId: session.user.id,
+        templateId: result.template?.id || 'none',
+        requiredCount: result.variables.required.length,
+        optionalCount: result.variables.optional.length,
+      })
 
-    return NextResponse.json({
-      success: true,
-      data: result,
-    })
+      return NextResponse.json({
+        success: true,
+        data: result,
+      })
+    } catch (error) {
+      if (error.message === 'Role not found') {
+        return NextResponse.json(
+          { error: { message: 'Role not found', code: 'ROLE_NOT_FOUND' } },
+          { status: 404 }
+        )
+      }
+      throw error
+    }
   } catch (error) {
-    logger.error('Error fetching role template', {
+    logger.error('Error fetching role template variables', {
       error: error.message,
       roleId: params.roleId,
+      userId: session?.user?.id
     })
 
     return NextResponse.json(
-      { error: { message: error.message || 'Failed to fetch role template' } },
+      { 
+        error: { 
+          message: 'Failed to fetch role template variables',
+          code: 'TEMPLATE_FETCH_ERROR'
+        } 
+      },
       { status: 500 }
     )
   }

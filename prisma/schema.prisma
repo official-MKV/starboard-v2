@@ -8,7 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  // directUrl = env("DIRECT_URL")
 }
 
 ///=== Activity logger===
@@ -279,6 +279,7 @@ model EmailTemplate {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   createdBy         String
+  roleInvitations Role[] @relation("RoleInvitationTemplate")
 
   workspace    Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   creator      User             @relation(fields: [createdBy], references: [id])
@@ -366,7 +367,9 @@ model Role {
   members       WorkspaceMember[]
   invitations   UserInvitation[]
   onboarding    OnboardingFlow? @relation(fields: [onboardingId], references: [id])
-    activities Activity[]
+  activities Activity[]
+  invitationTemplateId String?
+  invitationTemplate   EmailTemplate? @relation("RoleInvitationTemplate", fields: [invitationTemplateId], references: [id], onDelete: SetNull)
 
   @@unique([workspaceId, name])
   @@map("roles")
