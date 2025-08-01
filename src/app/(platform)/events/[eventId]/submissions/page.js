@@ -183,7 +183,7 @@ export default function DemoDaySubmissionsPage({ params }) {
   }
 
   return (
-    <PermissionWrapper permissions={['demo-day.judge', 'demo-day.manage']} requireAll={false}>
+    <PermissionWrapper permissions={['demo-day.judge', 'demo-day.manage',"events.manage"]} requireAll={false}>
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
