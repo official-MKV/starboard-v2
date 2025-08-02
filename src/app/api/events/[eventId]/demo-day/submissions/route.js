@@ -172,7 +172,7 @@ export async function POST(request, { params }) {
     const hasPermission = await WorkspaceContext.hasAnyPermission(
       session.user.id,
       workspaceContext.workspaceId,
-      ['events.participate', 'events.manage']
+      ['demo-day.participate', 'events.manage']
     )
 
     if (!hasPermission) {
