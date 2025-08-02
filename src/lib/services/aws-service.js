@@ -59,59 +59,64 @@ class AWSService {
     }
   }
 
-  // NEW: Enhanced validation with size limits
-  validateFile(fileName, fileType, fileSize, restrictions = {}) {
-    // Define file size limits
-    const FILE_SIZE_LIMITS = {
-      document: 300 * 1024 * 1024, // 300MB
-      video: 1.5 * 1024 * 1024 * 1024, // 1.5GB
-      image: 50 * 1024 * 1024, // 50MB
-      default: 100 * 1024 * 1024, // 100MB
-    }
-
-    const DOCUMENT_TYPES = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-    ]
-
-    const VIDEO_TYPES = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/avi', 'video/webm']
-
-    const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-
-    // Determine file category and size limit
-    let maxSize = FILE_SIZE_LIMITS.default
-    if (DOCUMENT_TYPES.includes(fileType)) {
-      maxSize = FILE_SIZE_LIMITS.document
-    } else if (VIDEO_TYPES.includes(fileType)) {
-      maxSize = FILE_SIZE_LIMITS.video
-    } else if (IMAGE_TYPES.includes(fileType)) {
-      maxSize = FILE_SIZE_LIMITS.image
-    }
-
-    const errors = []
-
-    // Check file size
-    if (fileSize > maxSize) {
-      const limitMB = Math.round(maxSize / 1024 / 1024)
-      const limitGB = limitMB >= 1024 ? (limitMB / 1024).toFixed(1) + 'GB' : limitMB + 'MB'
-      errors.push(`File size exceeds ${limitGB} limit for this file type`)
-    }
-
-    // Check file type
-    const allowedTypes = [...IMAGE_TYPES, ...DOCUMENT_TYPES, ...VIDEO_TYPES, 'application/zip']
-
-    if (!allowedTypes.includes(fileType)) {
-      errors.push(`File type ${fileType} is not allowed`)
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-    }
+validateFile(fileName, fileType, fileSize, restrictions = {}) {
+  
+  const FILE_SIZE_LIMITS = {
+    document: 300 * 1024 * 1024, // 300MB
+    video: 1.5 * 1024 * 1024 * 1024, // 1.5GB
+    image: 50 * 1024 * 1024, // 50MB
+    default: 100 * 1024 * 1024, // 100MB
   }
 
+  const DOCUMENT_TYPES = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+     
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+    'application/vnd.ms-powerpoint', // .ppt
+    'application/vnd.oasis.opendocument.presentation', // .odp (optional)
+     
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.ms-excel', // .xls
+    'text/plain',
+  ]
+
+  const VIDEO_TYPES = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/avi', 'video/webm']
+
+  const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
+  // Determine file category and size limit
+  let maxSize = FILE_SIZE_LIMITS.default
+  if (DOCUMENT_TYPES.includes(fileType)) {
+    maxSize = FILE_SIZE_LIMITS.document
+  } else if (VIDEO_TYPES.includes(fileType)) {
+    maxSize = FILE_SIZE_LIMITS.video
+  } else if (IMAGE_TYPES.includes(fileType)) {
+    maxSize = FILE_SIZE_LIMITS.image
+  }
+
+  const errors = []
+
+  // Check file size
+  if (fileSize > maxSize) {
+    const limitMB = Math.round(maxSize / 1024 / 1024)
+    const limitGB = limitMB >= 1024 ? (limitMB / 1024).toFixed(1) + 'GB' : limitMB + 'MB'
+    errors.push(`File size exceeds ${limitGB} limit for this file type`)
+  }
+
+  // Check file type
+  const allowedTypes = [...IMAGE_TYPES, ...DOCUMENT_TYPES, ...VIDEO_TYPES, 'application/zip']
+
+  if (!allowedTypes.includes(fileType)) {
+    errors.push(`File type ${fileType} is not allowed`)
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  }
+}
   // NEW: Initialize multipart upload for large files
   async initializeMultipartUpload(fileName, fileType, folder, userId) {
     try {
