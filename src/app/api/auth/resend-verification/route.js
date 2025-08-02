@@ -81,7 +81,7 @@ export async function POST(request) {
     // TODO: Send verification email
     await sendVerificationEmail(user.email, newToken, user.firstName)
 
-    logger.authEvent('verification_email_resent', user.id, { email: user.email })
+  
 
     timer.log('POST', '/api/auth/resend-verification', 200, user.id)
 

@@ -59,7 +59,7 @@ export async function POST(request) {
       },
     })
 
-    logger.authEvent('email_verified', user.id, { email: user.email })
+    
 
     timer.log('POST', '/api/auth/verify-email', 200, user.id)
 

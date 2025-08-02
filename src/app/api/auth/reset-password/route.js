@@ -1,4 +1,3 @@
-// app/api/auth/reset-password/route.js
 import { NextResponse } from 'next/server'
 import { PasswordResetService } from '@/lib/services/password-reset-service'
 import { validateRequest, apiResponse, apiError, handleApiError } from '@/lib/api-utils'
@@ -69,7 +68,7 @@ export async function POST(request) {
 
     const { token, password } = validation.data
 
-    // Complete password reset using PasswordResetService
+   
     const result = await PasswordResetService.completePasswordReset(token, password)
 
     if (!result.success) {

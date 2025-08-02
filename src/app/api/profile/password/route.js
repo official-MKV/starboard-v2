@@ -44,9 +44,7 @@ export async function PUT(request) {
     const isCurrentPasswordValid = await userService.verifyPassword(currentPassword, user.password)
 
     if (!isCurrentPasswordValid) {
-      logger.authEvent('password_change_failed', session.user.id, {
-        reason: 'invalid_current_password',
-      })
+    
       timer.log('PUT', '/api/profile/password', 400, session.user.id)
       return apiError('Current password is incorrect', 400, 'INVALID_PASSWORD')
     }
@@ -54,8 +52,7 @@ export async function PUT(request) {
     // Update password
     await userService.updatePassword(session.user.id, newPassword)
 
-    logger.authEvent('password_changed', session.user.id)
-
+   
     timer.log('PUT', '/api/profile/password', 200, session.user.id)
 
     return apiResponse({

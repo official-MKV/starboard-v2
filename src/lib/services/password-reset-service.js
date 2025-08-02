@@ -50,10 +50,10 @@ export class PasswordResetService {
       // Send password reset email
       await this.sendPasswordResetEmail(user.email, resetToken, user.firstName)
 
-      logger.authEvent('password_reset_initiated', user.id, {
-        email: user.email,
-        tokenExpiresAt: expiresAt.toISOString(),
-      })
+      // logger.authEvent('password_reset_initiated', user.id, {
+      //   email: user.email,
+      //   tokenExpiresAt: expiresAt.toISOString(),
+      // })
 
       return {
         success: true,
@@ -139,10 +139,10 @@ export class PasswordResetService {
       // Update password and clear reset token
       await userService.updatePassword(user.id, newPassword)
 
-      logger.authEvent('password_reset_completed', user.id, {
-        email: user.email,
-        resetTokenUsed: token,
-      })
+      // logger.authEvent('password_reset_completed', user.id, {
+      //   email: user.email,
+      //   resetTokenUsed: token,
+      // })
 
       // Send confirmation email
       try {

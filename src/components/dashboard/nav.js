@@ -151,9 +151,23 @@ export function DashboardNav({ user }) {
     setIsMobileOpen(false)
   }, [pathname])
 
-  const handleSignOut = async () => {
-    await signOut({ callbackUrl: '/login' })
+ const handleSignOut = async () => {
+  try {
+    
+    await signOut({ 
+      redirect: false  
+    })
+    document.cookie = 'starboard-workspace=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
+    window.location.href = '/auth/login'
+    
+  } catch (error) {
+    console.error('Logout error:', error)
+    document.cookie = 'starboard-workspace=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT'
+    localStorage.clear()
+    sessionStorage.clear()
+    window.location.href = '/auth/login'
   }
+}
 
   // Filter navigation items based on permissions
   const visibleNavigationItems = navigationItems.filter(item => {

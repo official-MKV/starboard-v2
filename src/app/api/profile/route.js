@@ -94,9 +94,7 @@ export async function PUT(request) {
       website: website?.trim() || null,
     })
 
-    logger.authEvent('profile_updated', session.user.id, {
-      fields: Object.keys(validation.data),
-    })
+   
 
     timer.log('PUT', '/api/profile', 200, session.user.id)
 
