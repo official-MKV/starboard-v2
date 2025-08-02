@@ -4,11 +4,8 @@ import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
 import { EventService } from '@/lib/services/event-service'
 import { logger } from '@/lib/logger'
-
-/**
- * GET /api/events/[id]
- * Get event details by ID
- */
+ 
+ 
 export async function GET(request, { params }) {
   try {
     const session = await auth()
@@ -18,22 +15,18 @@ export async function GET(request, { params }) {
 
     const eventId = params.eventId
     
-
-    // Get event details first to check workspace access
-    const event = await EventService.findById(eventId)
+   
+    const event = await EventService.findById(eventId, session.user.id)
     if (!event) {
       return NextResponse.json({ error: { message: 'Event not found' } }, { status: 404 })
     }
 
-    // Check if event is public or user has workspace access
+  
     let hasAccess = event.isPublic
 
-    if (!hasAccess) {
-      // Get workspace context from cookies
+    if (!hasAccess) { 
       const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
-
       if (workspaceContext && workspaceContext.workspaceId === event.workspaceId) {
-        // Check permissions for workspace events
         hasAccess = await WorkspaceContext.hasAnyPermission(session.user.id, event.workspaceId, [
           'events.view',
           'events.manage',
@@ -42,7 +35,7 @@ export async function GET(request, { params }) {
     }
 
     if (!hasAccess) {
-      // Additional check: verify user has specific access to this event
+     
       hasAccess = await EventService.checkEventAccess(eventId, session.user.id)
     }
 
@@ -58,6 +51,7 @@ export async function GET(request, { params }) {
       userId: session.user.id,
       isPublic: event.isPublic,
       workspaceId: event.workspaceId,
+      hasSubmission: event.type === 'DEMO_DAY' ? !!event.userSubmission : null,
     })
 
     return NextResponse.json({
@@ -72,7 +66,6 @@ export async function GET(request, { params }) {
     )
   }
 }
-
 /**
  * PUT /api/events/[id]
  * Update event by ID

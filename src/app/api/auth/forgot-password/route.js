@@ -29,56 +29,58 @@ export async function POST(request) {
     // Find user by email
     const user = await userService.findByEmail(email)
 
-    console.log(user)
-    if (user) {
-      if (!user.isActive) {
-        logger.warn('Password reset requested for inactive user', {
-          email: user.email,
-          userId: user.id,
-        })
-        // Still return success for security, but don't send email
-        timer.log('POST', '/api/auth/forgot-password', 200)
-        return apiResponse({
-          message: 'If an account with that email exists, we have sent a password reset link.',
-        })
-      }
-
-      // Generate password reset token
-      const resetToken = generateId(32)
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour from now
-
-      // Save reset token to database
-      await userService.setPasswordResetToken(email, resetToken, expiresAt)
-
-      // Send password reset email
-      try {
-        await sendPasswordResetEmail(user.email, resetToken, user.firstName)
-      } catch (emailError) {
-        logger.error('Failed to send password reset email', {
-          userId: user.id,
-          email: user.email,
-          error: emailError.message,
-        })
-
-        // Clear the token since email failed
-        await userService.setPasswordResetToken(email, null, null)
-
-        timer.log('POST', '/api/auth/forgot-password', 500)
-        return apiError(
-          'Failed to send password reset email. Please try again.',
-          500,
-          'EMAIL_SEND_ERROR'
-        )
-      }
-    } else {
+    if (!user) {
       logger.warn('Password reset requested for non-existent email', { email })
+      timer.log('POST', '/api/auth/forgot-password', 404)
+      return apiError('No account found with that email address', 404, 'USER_NOT_FOUND')
     }
+
+    if (!user.isActive) {
+      logger.warn('Password reset requested for inactive user', {
+        email: user.email,
+        userId: user.id,
+      })
+      timer.log('POST', '/api/auth/forgot-password', 403)
+      return apiError('Account is inactive', 403, 'ACCOUNT_INACTIVE')
+    }
+
+    // Generate password reset token
+    const resetToken = generateId(32)
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour from now
+
+    // Save reset token to database
+    await userService.setPasswordResetToken(email, resetToken, expiresAt)
+
+    // Send password reset email
+    try {
+      await sendPasswordResetEmail(user.email, resetToken, user.firstName)
+    } catch (emailError) {
+      logger.error('Failed to send password reset email', {
+        userId: user.id,
+        email: user.email,
+        error: emailError.message,
+      })
+
+      // Clear the token since email failed
+      await userService.setPasswordResetToken(email, null, null)
+
+      timer.log('POST', '/api/auth/forgot-password', 500)
+      return apiError(
+        'Failed to send password reset email. Please try again.',
+        500,
+        'EMAIL_SEND_ERROR'
+      )
+    }
+
+    logger.info('Password reset email sent successfully', {
+      email: user.email,
+      userId: user.id,
+    })
 
     timer.log('POST', '/api/auth/forgot-password', 200)
 
-    // Always return success response for security
     return apiResponse({
-      message: 'If an account with that email exists, we have sent a password reset link.',
+      message: 'Password reset link has been sent to your email',
     })
   } catch (error) {
     logger.apiError('POST', '/api/auth/forgot-password', error)
@@ -137,14 +139,6 @@ The {{workspace_name}} Team`,
     templateVariables,
     email
   )
-
-  logger.info('Password reset email sent successfully', {
-    email,
-    resetToken: token,
-    firstName,
-    messageId: result.messageId,
-    provider: result.provider,
-  })
 
   return result
 }

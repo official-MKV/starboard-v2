@@ -183,27 +183,27 @@ export class EventService {
   /**
    * Find event by ID with all relations
    */
-  static async findById(eventId) {
-    try {
-      const event = await prisma.event.findUnique({
-        where: { id: eventId },
-        include: {
-          creator: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              avatar: true,
-            },
+ static async findById(eventId, userId = null) {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatar: true,
           },
-          workspace: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
+        },
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
           },
-           demoDayConfig: {
+        },
+        demoDayConfig: {
           select: {
             submissionDeadline: true,
             allowLateSubmissions: true,
@@ -214,69 +214,112 @@ export class EventService {
             requireDemo: true,
             requireBusinessPlan: true,
             description: true,
-            scoringCriteria:true
+            scoringCriteria: true
           }
         },
-          speakers: {
-            orderBy: { order: 'asc' },
-          },
-          registrations: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  avatar: true,
-                  email: true,
-                },
+        speakers: {
+          orderBy: { order: 'asc' },
+        },
+        registrations: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                avatar: true,
+                email: true,
               },
-            },
-          },
-          resources: {
-            include: {
-              resource: true,
-            },
-          },
-          accessRules: true,
-          recordings: {
-            where: { isPublic: true },
-            orderBy: { createdAt: 'desc' },
-          },
-          waitlist: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  avatar: true,
-                },
-              },
-            },
-            orderBy: { position: 'asc' },
-          },
-          reminders: {
-            where: { isSent: false },
-          },
-          _count: {
-            select: {
-              registrations: true,
-              speakers: true,
-              waitlist: true,
             },
           },
         },
+        resources: {
+          include: {
+            resource: true,
+          },
+        },
+        accessRules: true,
+        recordings: {
+          where: { isPublic: true },
+          orderBy: { createdAt: 'desc' },
+        },
+        waitlist: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                avatar: true,
+              },
+            },
+          },
+          orderBy: { position: 'asc' },
+        },
+        reminders: {
+          where: { isSent: false },
+        },
+        _count: {
+          select: {
+            registrations: true,
+            speakers: true,
+            waitlist: true,
+            demoDaySubmissions: true,
+          },
+        },
+      },
+    })
+
+    if (!event) {
+      throw new Error('Event not found')
+    }
+
+     
+    if (event.type === 'DEMO_DAY' && userId) {
+      const userSubmission = await prisma.demoDaySubmission.findFirst({
+        where: {
+          eventId: eventId,
+          submitterId: userId
+        },
+        select: {
+          id: true,
+          projectTitle: true,
+          submittedAt: true,
+        }
+      })
+      
+     
+      event.userSubmission = userSubmission
+    }
+
+    return event
+  } catch (error) {
+    logger.error('Failed to find event', { eventId, error: error.message })
+    throw new Error('Event not found')
+  }
+}
+
+  /**
+   * Check if user has already submitted to a demo day
+   * @param {string} eventId - The demo day event ID
+   * @param {string} userId - The user ID
+   * @returns {boolean} - Whether user has submitted
+   */
+  static async hasUserSubmitted(eventId, userId) {
+    try {
+      const submission = await prisma.demoDaySubmission.findUnique({
+        where: {
+          eventId_submitterId: {
+            eventId: eventId,
+            submitterId: userId
+          }
+        }
       })
 
-      if (!event) {
-        throw new Error('Event not found')
-      }
-
-      return event
+      return !!submission
     } catch (error) {
-      logger.error('Failed to find event', { eventId, error: error.message })
-      throw new Error('Event not found')
+      logger.error('Failed to check user submission', { eventId, userId, error: error.message })
+      return false
     }
   }
 
@@ -569,9 +612,102 @@ static async createDemoDayConfig(eventId, configData, userId) {
   }
 }
 
-/**
- * Update demo day configuration
- */
+  /**
+   * Create a demo day submission
+   * @param {string} eventId - The demo day event ID
+   * @param {string} userId - The user ID
+   * @param {object} submissionData - The submission data
+   */
+  static async createDemoDaySubmission(eventId, userId, submissionData) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        // Check if event exists and is a demo day
+        const event = await tx.event.findUnique({
+          where: { id: eventId },
+          include: {
+            demoDayConfig: true
+          }
+        })
+
+        if (!event) {
+          throw new Error('Event not found')
+        }
+
+        if (event.type !== 'DEMO_DAY') {
+          throw new Error('This is not a demo day event')
+        }
+
+        // Check if submission deadline has passed
+        if (event.demoDayConfig?.submissionDeadline) {
+          const deadline = new Date(event.demoDayConfig.submissionDeadline)
+          const now = new Date()
+          
+          if (now > deadline && !event.demoDayConfig.allowLateSubmissions) {
+            throw new Error('Submission deadline has passed')
+          }
+        }
+
+        // Check if user has already submitted (this will throw an error due to unique constraint)
+        const existingSubmission = await tx.demoDaySubmission.findUnique({
+          where: {
+            eventId_submitterId: {
+              eventId: eventId,
+              submitterId: userId
+            }
+          }
+        })
+
+        if (existingSubmission) {
+          throw new Error('You have already submitted to this demo day')
+        }
+
+        // Create the submission
+        const submission = await tx.demoDaySubmission.create({
+          data: {
+            eventId,
+            submitterId: userId,
+            projectTitle: submissionData.projectTitle,
+            description: submissionData.description,
+            category: submissionData.category,
+            stage: submissionData.stage,
+            submissionUrl: submissionData.submissionUrl,
+          },
+        })
+
+        // Add resources if provided
+        if (submissionData.resources && submissionData.resources.length > 0) {
+          await tx.demoDaySubmissionResource.createMany({
+            data: submissionData.resources.map((resource, index) => ({
+              submissionId: submission.id,
+              type: resource.type,
+              title: resource.title,
+              url: resource.url,
+              description: resource.description,
+              order: index,
+            }))
+          })
+        }
+
+        logger.info('Demo day submission created', {
+          eventId,
+          userId,
+          submissionId: submission.id,
+          projectTitle: submissionData.projectTitle
+        })
+
+        return submission
+      })
+    } catch (error) {
+      logger.error('Failed to create demo day submission', { 
+        eventId, 
+        userId, 
+        error: error.message 
+      })
+      throw new Error(error.message || 'Failed to create submission')
+    }
+  }
+
+ 
 static async updateDemoDayConfig(eventId, configData, userId) {
   try {
     const config = await prisma.demoDayConfig.upsert({
@@ -590,10 +726,7 @@ static async updateDemoDayConfig(eventId, configData, userId) {
     throw new Error('Failed to update demo day configuration')
   }
 }
-
-/**
- * Assign judges to demo day
- */
+ 
 static async assignJudges(eventId, judges, userId) {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -620,9 +753,7 @@ static async assignJudges(eventId, judges, userId) {
     throw new Error('Failed to assign judges')
   }
 }
-  /**
-   * Register user for event
-   */
+ 
   static async registerUser(eventId, userId, invitedBy = null) {
     try {
       return await prisma.$transaction(async tx => {
@@ -709,10 +840,7 @@ static async assignJudges(eventId, judges, userId) {
       throw new Error(error.message || 'Failed to register for event')
     }
   }
-
-  /**
-   * Cancel registration
-   */
+ 
   static async cancelRegistration(eventId, userId) {
     try {
       return await prisma.$transaction(async tx => {

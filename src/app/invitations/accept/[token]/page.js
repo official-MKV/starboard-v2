@@ -632,7 +632,7 @@ export default function InvitationAcceptPage({ params }) {
         setCurrentStep('onboarding')
       } else {
         router.push(
-          '/auth/signin?message=account-created&workspace=' +
+          '/auth/login?message=account-created&workspace=' +
             encodeURIComponent(result.data.workspace.name)
         )
       }

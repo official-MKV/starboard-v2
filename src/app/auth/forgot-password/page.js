@@ -45,10 +45,21 @@ export default function ForgotPasswordPage() {
         toast.success('Password reset email sent!')
       } else {
         const result = await response.json()
+        
+        // Handle specific error cases
+        if (response.status === 404) {
+          setError('No account found with that email address')
+        } else if (response.status === 403) {
+          setError('Account is inactive. Please contact support.')
+        } else {
+          setError(result.error?.message || 'Failed to send reset email')
+        }
+        
         toast.error(result.error?.message || 'Failed to send reset email')
       }
     } catch (error) {
       console.error('Forgot password error:', error)
+      setError('An unexpected error occurred')
       toast.error('An unexpected error occurred')
     } finally {
       setIsLoading(false)
@@ -65,7 +76,7 @@ export default function ForgotPasswordPage() {
             </div>
             <h1 className="text-2xl font-bold text-charcoal-900">Check your email</h1>
             <p className="text-slate-gray-600 mt-2">
-              We've sent a password reset link to your email
+              Password reset link has been sent
             </p>
           </div>
 
@@ -73,13 +84,14 @@ export default function ForgotPasswordPage() {
             <CardContent className="pt-6 text-center space-y-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <Mail className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                <p className="text-sm text-green-800">We've sent a password reset link to:</p>
+                <p className="text-sm text-green-800">Reset link sent to:</p>
                 <p className="font-medium text-green-900 mt-1">{email}</p>
               </div>
 
               <div className="text-sm text-slate-gray-600 space-y-2">
                 <p>Click the link in the email to reset your password.</p>
-                <p>If you don't see the email, check your spam folder.</p>
+                <p>The link will expire in 1 hour.</p>
+                <p>Check your spam folder if you don't see the email.</p>
               </div>
 
               <div className="space-y-3 pt-4">
@@ -98,7 +110,7 @@ export default function ForgotPasswordPage() {
                   }}
                   className="w-full"
                 >
-                  Try Different Email
+                  Send to Different Email
                 </Button>
               </div>
             </CardContent>
@@ -117,7 +129,7 @@ export default function ForgotPasswordPage() {
             <span className="text-white font-bold text-2xl">S</span>
           </div>
           <h1 className="text-2xl font-bold text-charcoal-900">Forgot your password?</h1>
-          <p className="text-slate-gray-600 mt-2">No worries, we'll send you reset instructions</p>
+          <p className="text-slate-gray-600 mt-2">Enter your email to reset your password</p>
         </div>
 
         <Card className="starboard-card">
@@ -174,16 +186,6 @@ export default function ForgotPasswordPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Help Text */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-slate-gray-600">
-            Still having trouble?{' '}
-            <Link href="/contact" className="text-primary hover:underline">
-              Contact Support
-            </Link>
-          </p>
-        </div>
       </div>
     </div>
   )

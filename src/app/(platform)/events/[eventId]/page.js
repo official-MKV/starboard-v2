@@ -84,6 +84,7 @@ export default function EventDetailPage({ params }) {
       return response.json()
     },
   })
+  console.log(eventData)
 
   const { data: recordingsData } = useQuery({
     queryKey: ['event-recordings', eventId],
@@ -388,9 +389,9 @@ export default function EventDetailPage({ params }) {
           </div>
         )}
 
-        {/* Action Buttons */}
+      
         <div className="flex flex-wrap items-center gap-3">
-          {/* Demo Day Submit Button */}
+        
           {isDemoDay && !hasSubmitted && isSubmissionOpen && (
             <PermissionWrapper permissions={["demo-day.participate", "events.manage"]}>
               <Button

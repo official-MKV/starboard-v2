@@ -152,7 +152,7 @@ export function DashboardNav({ user }) {
   }, [pathname])
 
   const handleSignOut = async () => {
-    await signOut({ callbackUrl: '/' })
+    await signOut({ callbackUrl: '/login' })
   }
 
   // Filter navigation items based on permissions
