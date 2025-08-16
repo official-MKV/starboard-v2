@@ -1,4 +1,3 @@
-// app/api/events/[eventId]/demo-day/rankings/route.js
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { WorkspaceContext } from '@/lib/workspace-context'
@@ -77,11 +76,10 @@ export async function GET(request, { params }) {
       }
     }
 
-    // FIXED: Get rankings with correct schema fields
+    // FIXED: Get submissions without ordering by averageScore initially
     const submissions = await prisma.demoDaySubmission.findMany({
       where: {
         eventId,
-        // REMOVED: isSubmitted filter - doesn't exist in schema
         event: isPublic ? undefined : {
           workspaceId: workspaceContext.workspaceId
         }
@@ -95,7 +93,6 @@ export async function GET(request, { params }) {
             avatar: true
           }
         },
-        // FIXED: Remove isComplete filter and fix judge nesting
         scores: {
           include: {
             judge: {
@@ -113,35 +110,48 @@ export async function GET(request, { params }) {
         },
         _count: {
           select: {
-            scores: true // FIXED: Remove isComplete filter
+            scores: true
           }
         }
-      },
-      orderBy: [
-        { averageScore: 'desc' },
-        { submittedAt: 'asc' }
-      ]
-    })
-
-    // Calculate additional ranking stats
-    const rankingsWithStats = submissions.map((submission, index) => {
-      const totalJudges = submission.scores.length > 0 ? 
-        [...new Set(submission.scores.map(score => score.judgeId))].length : 0
-      
-      return {
-        ...submission,
-        rank: submission.rank || (index + 1), // Use calculated rank or position
-        totalJudges,
-        isFullyScored: totalJudges > 0,
-        // Calculate average if not already calculated
-        calculatedAverage: submission.scores.length > 0 
-          ? submission.scores.reduce((sum, score) => sum + score.totalScore, 0) / submission.scores.length 
-          : 0
       }
     })
 
+    // FIXED: Calculate rankings properly based on average scores
+    const rankingsWithStats = submissions.map((submission) => {
+      const totalJudges = submission.scores.length > 0 ? 
+        [...new Set(submission.scores.map(score => score.judgeId))].length : 0
+      
+      // Calculate the actual average score from judge scores
+      const calculatedAverage = submission.scores.length > 0 
+        ? submission.scores.reduce((sum, score) => sum + score.totalScore, 0) / submission.scores.length 
+        : 0
+
+      return {
+        ...submission,
+        totalJudges,
+        isFullyScored: totalJudges > 0,
+        calculatedAverage: calculatedAverage
+      }
+    })
+
+    // FIXED: Sort by calculated average in descending order, then by submission time
+    const sortedRankings = rankingsWithStats.sort((a, b) => {
+      // First sort by calculated average (descending)
+      if (b.calculatedAverage !== a.calculatedAverage) {
+        return b.calculatedAverage - a.calculatedAverage
+      }
+      // If averages are equal, sort by submission time (ascending - earlier submissions rank higher)
+      return new Date(a.submittedAt) - new Date(b.submittedAt)
+    })
+
+    // FIXED: Assign proper ranks based on sorted order
+    const finalRankings = sortedRankings.map((submission, index) => ({
+      ...submission,
+      rank: index + 1
+    }))
+
     const responseData = {
-      rankings: rankingsWithStats,
+      rankings: finalRankings,
       config: event.demoDayConfig,
       eventTitle: event.title,
       eventDate: event.startDate,
@@ -157,7 +167,7 @@ export async function GET(request, { params }) {
           category: submission.category,
           stage: submission.stage,
           rank: submission.rank,
-          averageScore: submission.averageScore || submission.calculatedAverage,
+          averageScore: submission.calculatedAverage,
           submittedAt: submission.submittedAt,
           submitter: {
             firstName: submission.submitter.firstName,
@@ -198,7 +208,7 @@ export async function GET(request, { params }) {
 
   } catch (error) {
     logger.error('Failed to fetch demo day rankings', { 
-      eventId: (await params).eventId, // FIXED: Await params in error logging
+      eventId: (await params).eventId,
       userId: session?.user?.id,
       error: error.message 
     })
@@ -237,7 +247,6 @@ export async function POST(request, { params }) {
       )
     }
 
-    // FIXED: Await params before accessing properties
     const { eventId } = await params
     const body = await request.json()
     const { action } = body
@@ -255,7 +264,7 @@ export async function POST(request, { params }) {
     }
 
     if (action === 'finalize') {
-      // Calculate final rankings by updating averageScore and rank fields
+      // FIXED: Calculate final rankings properly by calculated average
       const submissions = await prisma.demoDaySubmission.findMany({
         where: { 
           eventId,
@@ -268,51 +277,56 @@ export async function POST(request, { params }) {
         }
       })
 
-      // Calculate and update scores
-      const updates = []
-      for (const submission of submissions) {
-        if (submission.scores.length > 0) {
-          const avgScore = submission.scores.reduce((sum, score) => sum + score.totalScore, 0) / submission.scores.length
-          updates.push({
-            id: submission.id,
-            averageScore: avgScore
-          })
+      // Calculate average scores and sort properly
+      const submissionsWithAverage = submissions.map(submission => {
+        const calculatedAverage = submission.scores.length > 0 
+          ? submission.scores.reduce((sum, score) => sum + score.totalScore, 0) / submission.scores.length 
+          : 0
+        
+        return {
+          id: submission.id,
+          calculatedAverage,
+          submittedAt: submission.submittedAt
         }
-      }
+      })
 
-      // Update average scores
-      await Promise.all(
-        updates.map(update =>
-          prisma.demoDaySubmission.update({
-            where: { id: update.id },
-            data: { averageScore: update.averageScore }
-          })
-        )
-      )
+      // Sort by average score (descending), then by submission time (ascending)
+      const sortedSubmissions = submissionsWithAverage.sort((a, b) => {
+        if (b.calculatedAverage !== a.calculatedAverage) {
+          return b.calculatedAverage - a.calculatedAverage
+        }
+        return new Date(a.submittedAt) - new Date(b.submittedAt)
+      })
 
-      // Update ranks based on average scores
-      const sortedSubmissions = updates.sort((a, b) => b.averageScore - a.averageScore)
-      await Promise.all(
-        sortedSubmissions.map((submission, index) =>
+      // Update average scores and ranks
+      const updates = []
+      for (let i = 0; i < sortedSubmissions.length; i++) {
+        const submission = sortedSubmissions[i]
+        updates.push(
           prisma.demoDaySubmission.update({
             where: { id: submission.id },
-            data: { rank: index + 1 }
+            data: { 
+              averageScore: submission.calculatedAverage,
+              rank: i + 1
+            }
           })
         )
-      )
+      }
+
+      await Promise.all(updates)
 
       logger.info('Demo day rankings finalized', {
         eventId,
         workspaceId: workspaceContext.workspaceId,
         userId: session.user.id,
-        submissionCount: updates.length
+        submissionCount: sortedSubmissions.length
       })
       
       return NextResponse.json({
         success: true,
         data: { 
           message: 'Rankings finalized successfully',
-          updatedSubmissions: updates.length
+          updatedSubmissions: sortedSubmissions.length
         }
       })
     }
@@ -348,7 +362,7 @@ export async function POST(request, { params }) {
 
   } catch (error) {
     logger.error('Failed to update demo day rankings', { 
-      eventId: (await params).eventId, // FIXED: Await params in error logging
+      eventId: (await params).eventId,
       userId: session?.user?.id,
       error: error.message 
     })
