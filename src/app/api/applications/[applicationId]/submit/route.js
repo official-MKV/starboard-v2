@@ -201,8 +201,8 @@ async function sendConfirmationEmail({ application, submission, applicantData })
 
           <!-- Header with Logo -->
           <tr>
-            <td style="padding: 40px 40px 20px 40px; text-align: center; background-color: #3e3eff;">
-              <img src="${baseUrl}/logo-1.svg" alt="Starboard Logo" style="height: 50px; width: auto;">
+            <td style="padding: 40px 40px 20px 40px; text-align: center; ">
+              <img src="${baseUrl}/nigcomsat-logo.png" alt="Starboard Logo" style="height: 50px; width: auto;">
             </td>
           </tr>
 
