@@ -54,7 +54,7 @@ const StoryModal = ({ item, open, onClose }) => {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className='max-w-6xl w-[95vw] md:w-[85vw] lg:w-[80vw] max-h-[90vh] overflow-y-auto p-0'>
+      <DialogContent className='min-w-6xl w-[95vw] md:w-[85vw] lg:w-[80vw] max-h-[90vh] p-0'>
         <button
           onClick={onClose}
           className='absolute right-4 top-4 z-50 rounded-full bg-white/90 p-2 hover:bg-white transition-colors shadow-lg'
@@ -62,13 +62,13 @@ const StoryModal = ({ item, open, onClose }) => {
           <X className='h-5 w-5 text-gray-700' />
         </button>
 
-        <div className='grid md:grid-cols-2 gap-0'>
+        <div className='grid md:grid-cols-2 gap-0 overflow-hidden'>
           {/* Left side - Image */}
           <div className='h-[300px] md:h-full md:min-h-[500px] relative'>
             <img
               src={item.image}
               alt={item.name}
-              className='w-full h-full object-cover'
+              className='w-full h-full object-fit'
             />
             <div className='absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent' />
           </div>

@@ -209,7 +209,7 @@ async function sendConfirmationEmail({ application, submission, applicantData })
           <!-- Hero Image -->
           <tr>
             <td style="padding: 0;">
-              <img src="${baseUrl}/noise.jpg" alt="Application Received" style="width: 100%; height: 200px; object-fit: cover; display: block;">
+              <img src="${baseUrl}/noise4.jpg" alt="Application Received" style="width: 100%; height: 200px; object-fit: cover; display: block;">
             </td>
           </tr>
 
@@ -243,7 +243,7 @@ async function sendConfirmationEmail({ application, submission, applicantData })
               </table>
 
               <p style="margin: 0 0 20px 0; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
-                Our team will carefully review your application and get back to you soon. We appreciate your interest in joining the Starboard community.
+                Our team will carefully review your application and get back to you soon. 
               </p>
 
               <p style="margin: 0 0 30px 0; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
