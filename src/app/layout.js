@@ -12,6 +12,9 @@ export const metadata = {
   description: 'Comprehensive platform for managing accelerator programs, startups, and mentors',
   keywords: 'accelerator, startups, mentorship, program management',
   authors: [{ name: 'Starboard Team' }],
+   icons: {
+    icon: '/favicon.png',  
+  },
 }
 
 export const viewport = {
