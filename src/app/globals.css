@@ -82,21 +82,45 @@
   --color-snow-800: #f7f7f7;
   --color-snow-900: #f6f6f6;
 
-  --radius: 0.75rem;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
 
-  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --shadow-soft-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
-  --shadow-soft-xl: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --shadow-soft: none;
+  --shadow-soft-lg: none;
+  --shadow-soft-xl: none;
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-slide-in: slide-in 0.3s ease-out;
 }
+ .shimmer {
+          background: linear-gradient(
+            90deg,
+            #888 0%,
+            #3e3eff 45%,
+            #3e3eff 50%,
+            #3e3eff 55%,
+            #888 100%
+          );
+          background-size: 200% 100%;
+          background-clip: text;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: shimmer 6s linear infinite;
+        }
+
+        @keyframes shimmer{
+          0% {
+            background-position: -200% 0;
+          }
+          100% {
+            background-position: 200% 0;
+          }
+        }
 
 @keyframes accordion-down {
   from {
@@ -202,30 +226,41 @@ body {
 /* Starboard Custom Styles */
 .starboard-card {
   background-color: white;
-  border-radius: 0.5rem;
-  box-shadow: var(--shadow-soft);
   border: 1px solid var(--color-neutral-200);
 }
 
 .starboard-button {
-  border-radius: 0.5rem;
+  border-radius: 0;
   transition: all 200ms ease-in-out;
 }
 
+/* Remove rounded corners from all buttons globally (except modals) */
+button:not([data-modal-button]) {
+  border-radius: 0 !important;
+}
+
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  border-radius: 0 !important;
+}
+
 .starboard-input {
-  border-radius: 0.5rem;
+  border-radius: 0;
   border-color: var(--color-neutral-300);
+  background-color: white;
+  border-width: 1px;
 }
 
 .starboard-input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(62, 62, 255, 0.2);
+  outline: none;
 }
 
 .starboard-table {
-  border-radius: 0.5rem;
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--color-neutral-200);
 }
 
 /* Text truncation with tooltips */
@@ -333,7 +368,7 @@ body {
 
 .field-error:focus {
   border-color: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+  outline: none;
 }
 
 .error-message {
@@ -344,8 +379,8 @@ body {
 
 /* Toast notification overrides */
 [data-sonner-toast] {
-  border-radius: 0.5rem;
-  box-shadow: var(--shadow-soft-lg);
+  border-radius: 0;
+  border: 1px solid var(--color-neutral-200);
 }
 
 [data-sonner-toast][data-type='success'] {
@@ -361,4 +396,51 @@ body {
 [data-sonner-toast][data-type='warning'] {
   border-color: #fde68a;
   background-color: #fffbeb;
+}
+
+/* Infinite Carousel Styles */
+.carousel-container {
+  width: 100%;
+  overflow: hidden;
+}
+
+.carousel-track {
+  display: flex;
+  gap: 20px;
+  animation: carousel-scroll 40s linear infinite;
+  will-change: transform;
+}
+
+.carousel-track:hover {
+  animation-play-state: paused;
+}
+
+.carousel-item {
+  flex-shrink: 0;
+  width: 400px;
+  height: 280px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.carousel-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+@keyframes carousel-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 768px) {
+  .carousel-item {
+    width: 300px;
+    height: 200px;
+  }
 }

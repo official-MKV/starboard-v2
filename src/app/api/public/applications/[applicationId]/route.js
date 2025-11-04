@@ -5,7 +5,7 @@ import { logger, createRequestTimer } from '@/lib/logger'
 
 export async function GET(request, { params }) {
   const timer = createRequestTimer()
-  const { applicationId } = params
+  const { applicationId } = await params
 
   try {
     logger.apiRequest('GET', `/api/public/applications/${applicationId}`)

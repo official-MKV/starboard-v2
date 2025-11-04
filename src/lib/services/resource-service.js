@@ -34,9 +34,17 @@ export class ResourceService {
           fileName,
           fileSize,
           mimeType,
+          thumbnailUrl: resourceData.thumbnailUrl,
+          externalUrl: resourceData.externalUrl,
+          author: resourceData.author,
+          duration: resourceData.duration,
+          publishedAt: resourceData.publishedAt,
           isPublic: resourceData.isPublic || false,
+          isFeatured: resourceData.isFeatured || false,
           tags: resourceData.tags || [],
           category: resourceData.category,
+          topics: resourceData.topics || [],
+          difficulty: resourceData.difficulty,
         },
         include: {
           creator: {
@@ -140,9 +148,17 @@ export class ResourceService {
           fileName: uploadedFileData.originalName || uploadedFileData.fileName,
           fileSize: uploadedFileData.fileSize,
           mimeType: uploadedFileData.mimeType,
+          thumbnailUrl: resourceData.thumbnailUrl,
+          externalUrl: resourceData.externalUrl,
+          author: resourceData.author,
+          duration: resourceData.duration,
+          publishedAt: resourceData.publishedAt,
           isPublic: resourceData.isPublic || false,
+          isFeatured: resourceData.isFeatured || false,
           tags: resourceData.tags || [],
           category: resourceData.category,
+          topics: resourceData.topics || [],
+          difficulty: resourceData.difficulty,
         },
         include: {
           creator: {
@@ -328,6 +344,9 @@ export class ResourceService {
         isPublic,
         creatorId,
         tags,
+        topics,
+        difficulty,
+        isFeatured,
         eventId,
         page = 1,
         limit = 50,
@@ -340,15 +359,22 @@ export class ResourceService {
             { title: { contains: search, mode: 'insensitive' } },
             { description: { contains: search, mode: 'insensitive' } },
             { fileName: { contains: search, mode: 'insensitive' } },
+            { author: { contains: search, mode: 'insensitive' } },
           ],
         }),
         ...(type && type !== 'all' && { type }),
-        ...(category && category !== 'all' && { category }), // ← Fix this line
+        ...(category && category !== 'all' && { category }),
+        ...(difficulty && difficulty !== 'all' && { difficulty }),
         ...(typeof isPublic === 'boolean' && { isPublic }),
+        ...(typeof isFeatured === 'boolean' && { isFeatured }),
         ...(creatorId && { creatorId }),
         ...(tags &&
           tags.length > 0 && {
             tags: { hasSome: tags },
+          }),
+        ...(topics &&
+          topics.length > 0 && {
+            topics: { hasSome: topics },
           }),
         ...(eventId && {
           eventLinks: {
@@ -432,8 +458,16 @@ export class ResourceService {
         description: resourceData.description,
         type: resourceData.type,
         isPublic: resourceData.isPublic,
+        isFeatured: resourceData.isFeatured,
         tags: resourceData.tags,
         category: resourceData.category,
+        topics: resourceData.topics,
+        difficulty: resourceData.difficulty,
+        author: resourceData.author,
+        duration: resourceData.duration,
+        publishedAt: resourceData.publishedAt,
+        thumbnailUrl: resourceData.thumbnailUrl,
+        externalUrl: resourceData.externalUrl,
       }
 
       // Handle file replacement

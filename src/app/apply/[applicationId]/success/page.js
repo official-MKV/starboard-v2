@@ -2,9 +2,7 @@
 
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { CheckCircle, Download, Mail, Calendar, Home, Share2 } from 'lucide-react'
+import { CheckCircle, Home } from 'lucide-react'
 
 export default function ApplicationSuccessPage() {
   const params = useParams()
@@ -12,96 +10,77 @@ export default function ApplicationSuccessPage() {
   const { applicationId } = params
   const confirmationNumber = searchParams.get('confirmation')
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Application Submitted Successfully',
-          text: `I just submitted my application! Confirmation: ${confirmationNumber}`,
-        })
-      } catch (error) {
-        console.log('Error sharing:', error)
-      }
-    } else {
-      // Fallback for browsers that don't support Web Share API
-      navigator.clipboard.writeText(
-        `Application submitted successfully! Confirmation: ${confirmationNumber}`
-      )
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-snow-100">
-      <div className="container mx-auto px-4 py-16 max-w-2xl">
-        <Card className="starboard-card text-center">
-          <CardHeader className="pb-4">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="h-12 w-12 text-green-600" />
-            </div>
-            <CardTitle className="text-2xl text-charcoal-900">
-              Application Submitted Successfully!
-            </CardTitle>
-          </CardHeader>
+    <div className="min-h-screen bg-white flex items-center justify-center px-4">
+      <div className="max-w-2xl w-full text-center space-y-8">
+        {/* Success Icon */}
+        <div className="inline-flex items-center justify-center w-24 h-24 bg-primary/10 border-2 border-primary">
+          <CheckCircle className="h-12 w-12 text-primary" strokeWidth={2.5} />
+        </div>
 
-          <CardContent className="space-y-6">
-            <p className="text-lg text-slate-gray-600">
-              Thank you for your application. We have received your submission and will review it
-              carefully.
-            </p>
+        {/* Main Message */}
+        <div className="space-y-3">
+          <h1 className="text-4xl font-bold text-gray-900">
+            Application Submitted
+          </h1>
+          <p className="text-lg text-gray-600 max-w-md mx-auto">
+            Thank you for your submission. We've received your application and will review it carefully.
+          </p>
+        </div>
 
-            {/* Confirmation Details */}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-              <h3 className="font-semibold text-green-800 mb-3">Confirmation Details</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-green-600">Confirmation Number:</span>
-                  <span className="font-mono font-semibold text-green-800">
-                    {confirmationNumber || 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-green-600">Submitted:</span>
-                  <span className="text-green-800">
-                    {new Date().toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-green-600">Status:</span>
-                  <span className="text-green-800">Under Review</span>
-                </div>
-              </div>
+        {/* Confirmation Details */}
+        <div className="bg-gray-50 border border-gray-200 p-8 max-w-md mx-auto">
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Confirmation Number</span>
+              <span className="font-mono font-semibold text-gray-900 text-lg">
+                {confirmationNumber || 'N/A'}
+              </span>
             </div>
+            <div className="h-px bg-gray-200"></div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Submitted</span>
+              <span className="text-gray-900 font-medium">
+                {new Date().toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </span>
+            </div>
+            <div className="h-px bg-gray-200"></div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Status</span>
+              <span className="inline-flex items-center gap-2 text-gray-900 font-medium">
+                <div className="w-2 h-2 bg-primary"></div>
+                Under Review
+              </span>
+            </div>
+          </div>
+        </div>
 
-            {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Link href="/" className="flex-1">
-                <Button variant="outline" className="w-full">
-                  <Home className="mr-2 h-4 w-4" />
-                  Go Home
-                </Button>
-              </Link>
-            </div>
+        {/* Action Button */}
+        <div className="pt-4">
+          <Link href="/">
+            <button className="inline-flex items-center justify-center gap-2 bg-primary text-white px-8 py-3 font-medium hover:bg-primary-600 transition-colors">
+              <Home className="h-4 w-4" />
+              Return Home
+            </button>
+          </Link>
+        </div>
 
-            {/* Contact Information */}
-            <div className="border-t border-neutral-200 pt-4">
-              <p className="text-sm text-slate-gray-600">
-                Questions about your application? Contact our support team
-                <Link
-                  href="mailto:support@mystarboard.ng?subject=Support Request&body=Hello, I need help with..."
-                  className="text-primary hover:underline"
-                >
-                  support@mystarboard.ng
-                </Link>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Contact Information */}
+        <div className="pt-8 border-t border-gray-200 max-w-md mx-auto">
+          <p className="text-sm text-gray-600">
+            Questions about your application?{' '}
+            <Link
+              href="mailto:support@mystarboard.ng"
+              className="text-primary font-medium hover:underline"
+            >
+              Contact Support
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )

@@ -670,7 +670,7 @@ export class EmailService {
   }
 
   /**
-   * Enhanced email content formatting with better styling
+   * Enhanced email content formatting with clean, minimal styling
    */
   static formatEmailContent(content, variables = {}) {
     const htmlContent = content
@@ -685,9 +685,9 @@ export class EmailService {
 
     // Create header content with logo or workspace name
     const headerContent = workspaceLogo
-      ? `<img src="${workspaceLogo}" alt="${workspaceName}" style="max-height: 60px; max-width: 200px; object-fit: contain;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-         <h1 style="display: none; margin: 0; color: #1e293b; font-size: 28px; font-weight: 700;">${workspaceName}</h1>`
-      : `<h1 style="margin: 0; color: #1e293b; font-size: 28px; font-weight: 700;">${workspaceName}</h1>`
+      ? `<img src="${workspaceLogo}" alt="${workspaceName}" style="max-height: 50px; max-width: 180px; object-fit: contain; margin-bottom: 16px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+         <h1 style="display: none; margin: 0; color: #111827; font-size: 24px; font-weight: 700;">${workspaceName}</h1>`
+      : `<h1 style="margin: 0; color: #111827; font-size: 24px; font-weight: 700;">${workspaceName}</h1>`
 
     return `
   <!DOCTYPE html>
@@ -700,85 +700,120 @@ export class EmailService {
           body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
               line-height: 1.6;
-              color: #333;
+              color: #374151;
               max-width: 600px;
               margin: 0 auto;
               padding: 0;
-              background-color: #f8fafc;
+              background-color: #ffffff;
           }
           .email-container {
               background: white;
-              margin: 20px;
-              padding: 40px;
-              border-radius: 12px;
-              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-              border: 1px solid #e2e8f0;
+              margin: 0;
+              padding: 0;
           }
           .email-header {
               text-align: center;
-              border-bottom: 3px solid #3b82f6;
-              padding-bottom: 20px;
-              margin-bottom: 30px;
+              border: 3px solid #3e3eff;
+              padding: 32px 24px;
+              margin: 0;
+              background: white;
           }
           .email-header img {
-              max-height: 60px;
-              max-width: 200px;
+              max-height: 50px;
+              max-width: 180px;
               object-fit: contain;
+              margin-bottom: 16px;
           }
           .email-header h1 {
               margin: 0;
-              color: #1e293b;
-              font-size: 28px;
+              color: #111827;
+              font-size: 24px;
               font-weight: 700;
+          }
+          .email-content {
+              padding: 40px 24px;
+              background: white;
           }
           .email-content p {
               margin: 0 0 16px 0;
               font-size: 16px;
               line-height: 1.7;
+              color: #374151;
           }
           .email-content p:last-child {
               margin-bottom: 0;
           }
+          .email-content strong {
+              color: #111827;
+              font-weight: 600;
+          }
           .cta-button {
               display: inline-block;
-              padding: 14px 28px;
-              background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+              padding: 12px 32px;
+              background: #3e3eff;
               color: white !important;
               text-decoration: none;
-              border-radius: 8px;
+              border-radius: 0;
               font-weight: 600;
               font-size: 16px;
               margin: 24px 0;
-              transition: transform 0.2s;
+              border: none;
           }
           .cta-button:hover {
-              transform: translateY(-1px);
-              box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+              background: #2929d6;
+          }
+          .info-box {
+              background: #f9fafb;
+              border: 1px solid #e5e7eb;
+              padding: 20px;
+              margin: 24px 0;
+          }
+          .info-row {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 12px;
+              padding-bottom: 12px;
+              border-bottom: 1px solid #e5e7eb;
+          }
+          .info-row:last-child {
+              margin-bottom: 0;
+              padding-bottom: 0;
+              border-bottom: none;
+          }
+          .info-label {
+              color: #6b7280;
+              font-size: 14px;
+          }
+          .info-value {
+              color: #111827;
+              font-weight: 600;
+              font-size: 14px;
           }
           .email-footer {
-              margin-top: 40px;
-              padding-top: 20px;
-              border-top: 1px solid #e2e8f0;
+              margin-top: 0;
+              padding: 24px;
+              border-top: 1px solid #e5e7eb;
               font-size: 14px;
-              color: #64748b;
+              color: #6b7280;
               text-align: center;
+              background: #f9fafb;
           }
-          .divider {
-              height: 1px;
-              background: linear-gradient(90deg, transparent, #e2e8f0, transparent);
-              margin: 20px 0;
+          .email-footer p {
+              margin: 4px 0;
           }
           @media only screen and (max-width: 600px) {
-              .email-container {
-                  margin: 10px;
-                  padding: 20px;
+              .email-header {
+                  padding: 24px 16px;
+              }
+              .email-content {
+                  padding: 32px 16px;
               }
               .email-header h1 {
-                  font-size: 24px;
+                  font-size: 20px;
               }
               .email-header img {
-                  max-height: 50px;
-                  max-width: 180px;
+                  max-height: 40px;
+                  max-width: 150px;
               }
           }
       </style>
@@ -789,9 +824,8 @@ export class EmailService {
               ${headerContent}
           </div>
           <div class="email-content">
-              <p>${htmlContent}</p>
+              ${htmlContent}
           </div>
-          <div class="divider"></div>
           <div class="email-footer">
               <p>This email was sent from <strong>${workspaceName}</strong></p>
               <p>If you have any questions, please contact our support team</p>

@@ -29,7 +29,9 @@ import { DynamicFormRenderer } from '@/components/applications/dynamic-form-rend
 export default function ApplicationDetailPage({ params }) {
   const { applicationId } = params
   const [application, setApplication] = useState(null)
+  const [submissions, setSubmissions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
 
@@ -63,6 +65,37 @@ export default function ApplicationDetailPage({ params }) {
       fetchApplication()
     }
   }, [applicationId])
+
+  const fetchSubmissions = async () => {
+    try {
+      setIsLoadingSubmissions(true)
+      const response = await fetch(`/api/applications/${applicationId}/submissions`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch submissions')
+      }
+
+      const data = await response.json()
+      console.log('Submissions API response:', data) // Debug log
+      setSubmissions(data.data?.submissions || data.submissions || [])
+    } catch (err) {
+      console.error('Error fetching submissions:', err)
+      toast.error('Failed to load submissions')
+    } finally {
+      setIsLoadingSubmissions(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'submissions') {
+      fetchSubmissions()
+    }
+  }, [activeTab, applicationId])
 
   const getStatusBadge = () => {
     if (!application) return null
@@ -443,14 +476,107 @@ export default function ApplicationDetailPage({ params }) {
 
             <TabsContent value="submissions">
               <Card className="starboard-card">
-                <CardContent className="pt-6">
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-slate-gray-300 mx-auto mb-4" />
-                    <p className="text-slate-gray-600">Submissions component would go here</p>
-                    <Link href={`/applications/${applicationId}/submissions`}>
-                      <Button className="mt-4 starboard-button">View All Submissions</Button>
-                    </Link>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Submissions ({submissions.length})</CardTitle>
+                      <CardDescription>All applications submitted for this form</CardDescription>
+                    </div>
+                    <Button onClick={fetchSubmissions} disabled={isLoadingSubmissions}>
+                      {isLoadingSubmissions ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Refresh'
+                      )}
+                    </Button>
                   </div>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingSubmissions ? (
+                    <div className="text-center py-8">
+                      <Loader2 className="h-12 w-12 text-slate-gray-300 mx-auto mb-4 animate-spin" />
+                      <p className="text-slate-gray-600">Loading submissions...</p>
+                    </div>
+                  ) : submissions.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Users className="h-12 w-12 text-slate-gray-300 mx-auto mb-4" />
+                      <p className="text-slate-gray-600 mb-2">No submissions yet</p>
+                      <p className="text-sm text-slate-gray-500">
+                        Share your application form to start receiving submissions
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-slate-gray-50 border-b">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-slate-gray-600 uppercase">
+                                Email
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-slate-gray-600 uppercase">
+                                Status
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-slate-gray-600 uppercase">
+                                Submitted
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-slate-gray-600 uppercase">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {submissions.map(submission => (
+                              <tr key={submission.id} className="hover:bg-slate-gray-50">
+                                <td className="px-4 py-3 text-sm">
+                                  {submission.applicantEmail || submission.user?.email || 'N/A'}
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  <Badge
+                                    variant={
+                                      submission.status === 'ACCEPTED'
+                                        ? 'success'
+                                        : submission.status === 'REJECTED'
+                                        ? 'destructive'
+                                        : 'secondary'
+                                    }
+                                  >
+                                    {submission.status}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-gray-600">
+                                  {formatDate(submission.submittedAt)}
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  <Link href={`/applications/${applicationId}/submissions/${submission.id}`}>
+                                    <Button variant="outline" size="sm">
+                                      <Eye className="h-4 w-4 mr-1" />
+                                      View
+                                    </Button>
+                                  </Link>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {submissions.length > 0 && (
+                        <div className="flex items-center justify-between pt-4 border-t">
+                          <p className="text-sm text-slate-gray-600">
+                            Showing {submissions.length} submission{submissions.length !== 1 ? 's' : ''}
+                          </p>
+                          <Link href={`/applications/${applicationId}/submissions`}>
+                            <Button variant="outline" size="sm">
+                              View All Submissions
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -509,7 +635,7 @@ export default function ApplicationDetailPage({ params }) {
                           {field.description && (
                             <p className="text-sm text-slate-gray-600">{field.description}</p>
                           )}
-                          {field.options && field.options.length > 0 && (
+                          {Array.isArray(field.options) && field.options.length > 0 && (
                             <div className="mt-2">
                               <p className="text-xs text-slate-gray-500 mb-1">Options:</p>
                               <div className="flex flex-wrap gap-1">

@@ -2,6 +2,8 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 import { Toaster } from 'sonner'
+import Nav from "@/components/web/Nav"
+import Footer from '@/components/web/Footer'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -22,10 +24,12 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className="h-full">
       <body className={`${inter.className} h-full antialiased`}>
+       
         <Providers>
           <div className="min-h-full bg-snow-100">{children}</div>
-          <Toaster position="top-right" expand={true} richColors={true} closeButton={true} />
+          
         </Providers>
+    
       </body>
     </html>
   )

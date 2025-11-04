@@ -19,10 +19,73 @@ export function DynamicFormRenderer({
   const [formValues, setFormValues] = useState(initialValues)
   const [fieldErrors, setFieldErrors] = useState({})
   const [uploadingFiles, setUploadingFiles] = useState({})
+  const [isFormValidState, setIsFormValidState] = useState(false)
+
+  // Helper function to normalize field options from JSON to array
+  const getFieldOptions = (field) => {
+    if (!field.options) return []
+
+    // If it's already an array, return it
+    if (Array.isArray(field.options)) return field.options
+
+    // If it's a string, try to parse it
+    if (typeof field.options === 'string') {
+      try {
+        const parsed = JSON.parse(field.options)
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    }
+
+    // If it's an object (Prisma JsonValue), try to convert
+    if (typeof field.options === 'object') {
+      // Check if it's an object with numeric keys (array-like)
+      const keys = Object.keys(field.options)
+      if (keys.every(k => !isNaN(k))) {
+        return Object.values(field.options)
+      }
+    }
+
+    return []
+  }
+
+  // Helper function to normalize allowed file types
+  const getAllowedFileTypes = (field) => {
+    if (!field.allowedFileTypes) return []
+
+    // If it's already an array, return it
+    if (Array.isArray(field.allowedFileTypes)) return field.allowedFileTypes
+
+    // If it's a string, try to parse it
+    if (typeof field.allowedFileTypes === 'string') {
+      try {
+        const parsed = JSON.parse(field.allowedFileTypes)
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    }
+
+    // If it's an object, try to convert
+    if (typeof field.allowedFileTypes === 'object') {
+      const keys = Object.keys(field.allowedFileTypes)
+      if (keys.every(k => !isNaN(k))) {
+        return Object.values(field.allowedFileTypes)
+      }
+    }
+
+    return []
+  }
 
   useEffect(() => {
     setFormValues(initialValues)
   }, [initialValues])
+
+  // Update form validity whenever formValues change
+  useEffect(() => {
+    setIsFormValidState(isFormValid())
+  }, [formValues, fields])
 
   const handleValueChange = (fieldId, value) => {
     const updatedValues = { ...formValues, [fieldId]: value }
@@ -159,10 +222,11 @@ export function DynamicFormRenderer({
       }
 
       // Check file type
-      if (field.allowedFileTypes && field.allowedFileTypes.length > 0) {
+      const allowedTypes = getAllowedFileTypes(field)
+      if (allowedTypes.length > 0) {
         const fileExtension = file.name.split('.').pop()?.toLowerCase()
-        if (!field.allowedFileTypes.includes(fileExtension)) {
-          return `File type ".${fileExtension}" not allowed. Allowed types: ${field.allowedFileTypes.join(', ')}`
+        if (!allowedTypes.includes(fileExtension)) {
+          return `File type ".${fileExtension}" not allowed. Allowed types: ${allowedTypes.join(', ')}`
         }
       }
     }
@@ -256,13 +320,18 @@ export function DynamicFormRenderer({
     e.preventDefault()
     if (!validateForm()) return
 
-    try {
-      // Process file uploads first
-      const processedValues = { ...formValues }
+    // Pass raw form values to parent - let parent handle file uploads
+    onSubmit?.(formValues)
+  }
 
+  // Expose uploadFiles function to parent component
+  const processFileUploads = async (values) => {
+    const processedValues = { ...values }
+
+    try {
       for (const field of fields) {
-        if ((field.type === 'FILE_UPLOAD' || field.type === 'MULTI_FILE') && formValues[field.id]) {
-          const files = formValues[field.id]
+        if ((field.type === 'FILE_UPLOAD' || field.type === 'MULTI_FILE') && values[field.id]) {
+          const files = values[field.id]
           if (files instanceof FileList && files.length > 0) {
             const uploadedFiles = await uploadFiles(files, field.id)
             processedValues[field.id] =
@@ -270,11 +339,10 @@ export function DynamicFormRenderer({
           }
         }
       }
-
-      onSubmit?.(processedValues)
+      return processedValues
     } catch (error) {
       console.error('Form submission error:', error)
-      // Handle upload error - could set an error state here
+      throw error
     }
   }
 
@@ -481,7 +549,7 @@ export function DynamicFormRenderer({
               className={`starboard-input ${error ? 'border-red-500' : ''}`}
             >
               <option value="">Select an option...</option>
-              {field.options?.map((option, index) => (
+              {getFieldOptions(field).map((option, index) => (
                 <option key={index} value={option.value}>
                   {option.label}
                 </option>
@@ -509,7 +577,7 @@ export function DynamicFormRenderer({
               <p className="text-sm text-slate-gray-600">{field.description}</p>
             )}
             <div className="space-y-2">
-              {field.options?.map((option, index) => (
+              {getFieldOptions(field).map((option, index) => (
                 <label key={index} className="flex items-center space-x-2">
                   <input
                     type="radio"
@@ -545,7 +613,7 @@ export function DynamicFormRenderer({
               <p className="text-sm text-slate-gray-600">{field.description}</p>
             )}
             <div className="space-y-2">
-              {field.options?.map((option, index) => {
+              {getFieldOptions(field).map((option, index) => {
                 const selectedValues = Array.isArray(value) ? value : []
                 return (
                   <label key={index} className="flex items-center space-x-2">
@@ -635,7 +703,7 @@ export function DynamicFormRenderer({
                 id={baseId}
                 type="file"
                 multiple={field.type === 'MULTI_FILE'}
-                accept={field.allowedFileTypes?.map(type => `.${type}`).join(',')}
+                accept={getAllowedFileTypes(field).length > 0 ? getAllowedFileTypes(field).map(type => `.${type}`).join(',') : undefined}
                 onChange={e => handleFileChange(field.id, e.target.files, field)}
                 className="hidden"
                 disabled={isUploading}
@@ -657,9 +725,9 @@ export function DynamicFormRenderer({
                 )}
               </Button>
 
-              {field.allowedFileTypes && (
+              {getAllowedFileTypes(field).length > 0 && (
                 <p className="text-xs text-slate-gray-500 mt-2">
-                  Allowed: {field.allowedFileTypes.join(', ')}
+                  Allowed: {getAllowedFileTypes(field).join(', ')}
                 </p>
               )}
               {field.maxFileSize && (
@@ -786,7 +854,7 @@ export function DynamicFormRenderer({
         <div className="flex justify-end pt-6 border-t border-neutral-200">
           <Button
             type="submit"
-            disabled={isSubmitting || !isFormValid()}
+            disabled={isSubmitting || !isFormValidState}
             className="starboard-button min-w-32"
           >
             {isSubmitting ? (

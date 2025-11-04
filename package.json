@@ -70,6 +70,7 @@
     "three": "^0.176.0",
     "ws": "^8.18.2",
     "xlsx": "^0.18.5",
+    "youtube-metadata-from-url": "^1.0.3",
     "zod": "^3.25.60"
   },
   "devDependencies": {

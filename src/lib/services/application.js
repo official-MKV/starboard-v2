@@ -32,9 +32,7 @@ export const applicationService = {
       return await prisma.applicationSubmission.findFirst({
         where: {
           applicationId,
-          user: {
-            email: email,
-          },
+          applicantEmail: email.toLowerCase().trim(),
         },
         include: {
           user: {
@@ -542,6 +540,20 @@ export const applicationService = {
   // ==========================================
   // ANALYTICS & STATS
   // ==========================================
+
+  async getSubmissionCount(applicationId, options = {}) {
+    try {
+      const { status } = options
+      return await prisma.applicationSubmission.count({
+        where: {
+          applicationId,
+          ...(status ? { status } : {}),
+        },
+      })
+    } catch (error) {
+      throw handleDatabaseError(error)
+    }
+  },
 
   async getApplicationStats(applicationId) {
     try {

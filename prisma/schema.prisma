@@ -833,14 +833,32 @@ model Resource {
   title       String
   description String?
   type        ResourceType @default(FILE)
+
+  // File/Media information
   fileUrl     String?
   fileName    String?
   fileSize    Int?
   mimeType    String?
+  thumbnailUrl String?
+  externalUrl  String?  // For links, videos, podcasts
+
+  // Metadata for different content types
+  author      String?
+  duration    Int?     // Duration in seconds (for videos/podcasts)
+  publishedAt DateTime?
+
+  // Organization and discovery
   isPublic    Boolean  @default(false)
+  isFeatured  Boolean  @default(false)
   tags        String[] @default([])
   category    String?
+  topics      String[] @default([])  // Additional categorization
+  difficulty  ResourceDifficulty?
+
+  // Analytics
   downloadCount Int    @default(0)
+  viewCount     Int    @default(0)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1030,11 +1048,20 @@ enum ResourceType {
   FILE
   LINK
   VIDEO
+  PODCAST
   DOCUMENT
   PRESENTATION
   SPREADSHEET
   IMAGE
+  ARTICLE
   OTHER
+}
+
+enum ResourceDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
 }
 
 

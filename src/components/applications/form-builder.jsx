@@ -140,6 +140,63 @@ const FIELD_TYPES = [
 
 const FIELD_CATEGORIES = ['Basic', 'Choice', 'Advanced', 'Layout']
 
+// Helper function to normalize field options from JSON to array
+const getFieldOptions = (field) => {
+  if (!field.options) return []
+
+  // If it's already an array, return it
+  if (Array.isArray(field.options)) return field.options
+
+  // If it's a string, try to parse it
+  if (typeof field.options === 'string') {
+    try {
+      const parsed = JSON.parse(field.options)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  // If it's an object (Prisma JsonValue), try to convert
+  if (typeof field.options === 'object') {
+    // Check if it's an object with numeric keys (array-like)
+    const keys = Object.keys(field.options)
+    if (keys.every(k => !isNaN(k))) {
+      return Object.values(field.options)
+    }
+  }
+
+  return []
+}
+
+// Helper function to normalize allowed file types
+const getAllowedFileTypes = (field) => {
+  if (!field.allowedFileTypes) return []
+
+  // If it's already an array, return it
+  if (Array.isArray(field.allowedFileTypes)) return field.allowedFileTypes
+
+  // If it's a string, try to parse it
+  if (typeof field.allowedFileTypes === 'string') {
+    try {
+      const parsed = JSON.parse(field.allowedFileTypes)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  // If it's an object, try to convert
+  if (typeof field.allowedFileTypes === 'object') {
+    const keys = Object.keys(field.allowedFileTypes)
+    if (keys.every(k => !isNaN(k))) {
+      return Object.values(field.allowedFileTypes)
+    }
+  }
+
+  return []
+}
+
 export function FormBuilder({ initialFields = [], onFieldsChange, isPreview = false }) {
   const [fields, setFields] = useState(initialFields)
   const [selectedField, setSelectedField] = useState(null)
@@ -347,7 +404,7 @@ export function FormBuilder({ initialFields = [], onFieldsChange, isPreview = fa
           </div>
 
           {/* Form Builder Area */}
-          <div className="flex-1 p-6">
+          <div className="flex-1 p-6 overflow-y-auto">
             <div className="max-w-4xl mx-auto">
               {fields.length === 0 ? (
                 <div className="text-center py-20">
@@ -514,7 +571,7 @@ export function FormBuilder({ initialFields = [], onFieldsChange, isPreview = fa
 
         {/* Settings Sidebar */}
         {selectedField && (
-          <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+          <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-y-scroll">
             <div className="p-6 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">Field Settings</h3>
@@ -618,7 +675,7 @@ function FieldPreview({ field }) {
           </Label>
           <select className={baseClasses} disabled>
             <option>Select an option...</option>
-            {field.options?.map((option, index) => (
+            {getFieldOptions(field).map((option, index) => (
               <option key={index} value={option.value}>
                 {option.label}
               </option>
@@ -636,7 +693,7 @@ function FieldPreview({ field }) {
             {field.required && <span className="text-red-500 ml-1">*</span>}
           </Label>
           <div className="space-y-2">
-            {field.options?.map((option, index) => (
+            {getFieldOptions(field).map((option, index) => (
               <label key={index} className="flex items-center space-x-2 cursor-pointer">
                 <input type="radio" name={field.id} disabled className="text-blue-600" />
                 <span className="text-sm text-gray-700">{option.label}</span>
@@ -655,7 +712,7 @@ function FieldPreview({ field }) {
             {field.required && <span className="text-red-500 ml-1">*</span>}
           </Label>
           <div className="space-y-2">
-            {field.options?.map((option, index) => (
+            {getFieldOptions(field).map((option, index) => (
               <label key={index} className="flex items-center space-x-2 cursor-pointer">
                 <input type="checkbox" disabled className="text-blue-600 rounded" />
                 <span className="text-sm text-gray-700">{option.label}</span>
@@ -741,13 +798,13 @@ function FieldPreview({ field }) {
 // Enhanced Field Settings Component
 function FieldSettings({ field, onUpdate }) {
   const handleOptionChange = (index, key, value) => {
-    const updatedOptions = [...(field.options || [])]
+    const updatedOptions = [...getFieldOptions(field)]
     updatedOptions[index] = { ...updatedOptions[index], [key]: value }
     onUpdate({ options: updatedOptions })
   }
 
   const addOption = () => {
-    const options = field.options || []
+    const options = getFieldOptions(field)
     onUpdate({
       options: [
         ...options,
@@ -757,7 +814,7 @@ function FieldSettings({ field, onUpdate }) {
   }
 
   const removeOption = index => {
-    const updatedOptions = (field.options || []).filter((_, i) => i !== index)
+    const updatedOptions = getFieldOptions(field).filter((_, i) => i !== index)
     onUpdate({ options: updatedOptions })
   }
 
@@ -884,7 +941,7 @@ function FieldSettings({ field, onUpdate }) {
           <div className="space-y-4">
             <h4 className="font-medium text-gray-900">Options</h4>
             <div className="space-y-3">
-              {(field.options || []).map((option, index) => (
+              {getFieldOptions(field).map((option, index) => (
                 <div key={index} className="flex items-center space-x-2">
                   <Input
                     value={option.label}
@@ -951,6 +1008,142 @@ function FieldSettings({ field, onUpdate }) {
                   />
                 </div>
               )}
+
+              {/* Allowed File Types */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Allowed File Types</Label>
+
+                {/* Quick Select Groups */}
+                <div className="mb-3">
+                  <p className="text-xs text-gray-600 mb-2">Quick Select:</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({ allowedFileTypes: ['*'] })
+                      }}
+                    >
+                      All Files
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({ allowedFileTypes: ['pdf', 'doc', 'docx', 'txt', 'rtf', 'odt'] })
+                      }}
+                    >
+                      Documents
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({ allowedFileTypes: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'] })
+                      }}
+                    >
+                      Images
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({ allowedFileTypes: ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv'] })
+                      }}
+                    >
+                      Videos
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({ allowedFileTypes: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'] })
+                      }}
+                    >
+                      Audio
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({ allowedFileTypes: ['xls', 'xlsx', 'csv', 'ods'] })
+                      }}
+                    >
+                      Spreadsheets
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({ allowedFileTypes: ['ppt', 'pptx', 'odp'] })
+                      }}
+                    >
+                      Presentations
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({ allowedFileTypes: ['zip', 'rar', '7z', 'tar', 'gz'] })
+                      }}
+                    >
+                      Archives
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Current Selected Types */}
+                <div className="space-y-2">
+                  {getAllowedFileTypes(field).map((type, index) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <Input
+                        value={type}
+                        onChange={e => {
+                          const updatedTypes = [...getAllowedFileTypes(field)]
+                          updatedTypes[index] = e.target.value.toLowerCase().replace(/[^a-z0-9*]/g, '')
+                          onUpdate({ allowedFileTypes: updatedTypes })
+                        }}
+                        placeholder="e.g., pdf, jpg, png or * for all"
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={() => {
+                          const updatedTypes = getAllowedFileTypes(field).filter((_, i) => i !== index)
+                          onUpdate({ allowedFileTypes: updatedTypes })
+                        }}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    onClick={() => {
+                      const currentTypes = getAllowedFileTypes(field)
+                      onUpdate({ allowedFileTypes: [...currentTypes, ''] })
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Custom File Type
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Enter file extensions without dots (e.g., pdf, jpg, png) or use * to allow all files
+                </p>
+              </div>
             </div>
           </div>
         </>

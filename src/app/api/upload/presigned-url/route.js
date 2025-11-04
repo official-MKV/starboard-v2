@@ -8,9 +8,6 @@ import { logger } from '@/lib/logger'
 export async function POST(request) {
   try {
     const session = await auth()
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
-    }
 
     const body = await request.json()
     const { fileName, fileType, folder = 'uploads' } = body
@@ -30,11 +27,14 @@ export async function POST(request) {
       )
     }
 
+    // Use user ID if authenticated, otherwise use 'public' for public uploads
+    const userId = session?.user?.id || 'public'
+
     const presignedData = await awsService.getPresignedUploadUrl(
       fileName,
       fileType,
       folder,
-      session.user.id
+      userId
     )
 
     // Fix: Return uploadUrl to match what the frontend expects

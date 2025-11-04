@@ -9,7 +9,7 @@ import { EmailTemplateService } from '@/lib/services/email-template-service' // 
 import { z } from 'zod'
 
 const submitApplicationSchema = z.object({
-  applicantEmail: z.string().email('Invalid email address').optional(),
+  applicantEmail: z.string().email('Invalid email address'),
   applicantFirstName: z.string().min(1, 'First name is required').optional(),
   applicantLastName: z.string().min(1, 'Last name is required').optional(),
   applicantPhone: z.string().optional(),
@@ -20,7 +20,7 @@ const submitApplicationSchema = z.object({
 
 export async function POST(request, { params }) {
   const timer = createRequestTimer()
-  const { applicationId } = params
+  const { applicationId } = await params
 
   try {
     logger.apiRequest('POST', `/api/applications/${applicationId}/submit`)
@@ -30,7 +30,10 @@ export async function POST(request, { params }) {
 
     if (!validation.success) {
       timer.log('POST', `/api/applications/${applicationId}/submit`, 400)
-      return apiError('Validation failed', 400, 'VALIDATION_ERROR')
+      const errorMessage = validation.errors?.[0]?.message || 'Validation failed'
+      return apiError(errorMessage, 400, 'VALIDATION_ERROR', {
+        errors: validation.errors
+      })
     }
 
     const data = validation.data
@@ -127,7 +130,7 @@ export async function POST(request, { params }) {
     // Update submission count
     await applicationService.incrementSubmissionCount(applicationId)
 
-    // ✅ NEW: Send confirmation email to applicant
+    // ✅ Send confirmation email to applicant
     try {
       await sendConfirmationEmail({
         application,
@@ -154,41 +157,6 @@ export async function POST(request, { params }) {
       })
     }
 
-    try {
-      await EmailService.sendEmail({
-        to: data.applicantEmail,
-        subject: `Application Received - ${application.title}`,
-        html: EmailService.formatEmailContent(
-          `
-    Hello ${data.applicantFirstName},
-
-    Thank you for submitting your application for **${application.title}**.
-
-    **Application Details:**
-    - Confirmation Number: **${submission.id.slice(-8).toUpperCase()}**
-    - Submitted: ${new Date().toLocaleDateString()}
-    - Status: Under Review
-
-    We have received your application and will review it carefully. You will receive an update on the status of your application soon.
-
-    If you have any questions, please contact our support team.
-
-    Best regards,
-    ${application.workspace?.name || 'The Team'}
-        `,
-          {
-            workspace_name: application.workspace?.name || 'Our Team',
-            workspace_logo: application.workspace?.logo,
-          }
-        ),
-      })
-
-      console.log('✅ Confirmation email sent successfully')
-    } catch (emailError) {
-      // Log error but don't fail the submission
-      console.error('❌ Failed to send confirmation email:', emailError.message)
-    }
-
     timer.log('POST', `/api/applications/${applicationId}/submit`, 201)
 
     return apiResponse(
@@ -213,67 +181,122 @@ export async function POST(request, { params }) {
 // ✅ NEW: Function to send confirmation email
 async function sendConfirmationEmail({ application, submission, applicantData }) {
   try {
-    // Try to find an APPLICATION_RECEIVED template first
-    let template
-    try {
-      template = await EmailTemplateService.findByWorkspace(application.workspaceId, {
-        type: 'APPLICATION_RECEIVED',
-        isActive: true,
-      })
-      template = template?.[0] // Get first active template
-    } catch (error) {
-      logger.warn('No APPLICATION_RECEIVED template found, using default', {
-        workspaceId: application.workspaceId,
-        error: error.message,
-      })
-    }
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const confirmationNumber = submission.id.slice(-8).toUpperCase()
 
-    // Use template if found, otherwise use default content
-    if (template) {
-      // Use the template
-      const variables = {
-        first_name: applicantData.firstName,
-        last_name: applicantData.lastName,
-        application_title: application.title,
-        confirmation_number: submission.id.slice(-8).toUpperCase(),
-        submission_date: new Date().toLocaleDateString(),
-        workspace_name: application.workspace?.name || 'Our Team',
-        status_link: `${process.env.NEXT_PUBLIC_BASE_URL}/apply/${application.id}/status?email=${encodeURIComponent(applicantData.email)}`,
-      }
+    // Create branded HTML email template
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Application Received</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px;">
 
-      await EmailTemplateService.sendTemplatedEmail(template, variables, applicantData.email)
-    } else {
-      // Use simple confirmation email
-      const confirmationTemplate = {
-        subject: `Application Received - ${application.title}`,
-        content: `Hello ${applicantData.firstName},
+          <!-- Header with Logo -->
+          <tr>
+            <td style="padding: 40px 40px 20px 40px; text-align: center; background-color: #3e3eff;">
+              <img src="${baseUrl}/logo-1.svg" alt="Starboard Logo" style="height: 50px; width: auto;">
+            </td>
+          </tr>
 
-Thank you for submitting your application for **${application.title}**.
+          <!-- Hero Image -->
+          <tr>
+            <td style="padding: 0;">
+              <img src="${baseUrl}/noise.jpg" alt="Application Received" style="width: 100%; height: 200px; object-fit: cover; display: block;">
+            </td>
+          </tr>
 
-**Application Details:**
-- Confirmation Number: **${submission.id.slice(-8).toUpperCase()}**
-- Submitted: ${new Date().toLocaleDateString()}
-- Status: Under Review
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h1 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 28px; font-weight: 700; line-height: 1.3;">
+                Application Received!
+              </h1>
 
-We have received your application and will review it carefully. You will receive an update on the status of your application soon.
+              <p style="margin: 0 0 20px 0; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+                Dear ${applicantData.firstName || 'Applicant'},
+              </p>
 
-If you have any questions, please contact our support team.
+              <p style="margin: 0 0 20px 0; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+                Thank you for submitting your application for <strong>${application.title}</strong>. We have received your application and are excited to review it.
+              </p>
 
-Best regards,
-${application.workspace?.name || 'The Team'}`,
-        requiredVariables: [],
-        optionalVariables: [],
-      }
+              <!-- Submission Date -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0f0ff; border: 1px solid #3e3eff; margin: 30px 0;">
+                <tr>
+                  <td style="padding: 24px; text-align: center;">
+                    <p style="margin: 0 0 8px 0; color: #666666; font-size: 14px;">
+                      Submitted on
+                    </p>
+                    <p style="margin: 0; color: #1a1a1a; font-size: 18px; font-weight: 600;">
+                      ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  </td>
+                </tr>
+              </table>
 
-      await EmailService.sendTemplatedEmail(
-        confirmationTemplate,
-        {
-          workspace_name: application.workspace?.name || 'Our Team',
-          workspace_logo: application.workspace?.logo,
-        },
-        applicantData.email
-      )
-    }
+              <p style="margin: 0 0 20px 0; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+                Our team will carefully review your application and get back to you soon. We appreciate your interest in joining the Starboard community.
+              </p>
+
+              <p style="margin: 0 0 30px 0; color: #4a4a4a; font-size: 16px; line-height: 1.6;">
+                If you have any questions, please don't hesitate to contact our support team.
+              </p>
+
+              <!-- Signature -->
+              <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5;">
+                <p style="margin: 0 0 8px 0; color: #1a1a1a; font-size: 16px; font-weight: 600;">
+                  Best regards,
+                </p>
+                <p style="margin: 0 0 4px 0; color: #1a1a1a; font-size: 16px; font-weight: 600;">
+                  Mrs. Maureen Nzekwe
+                </p>
+                <p style="margin: 0; color: #666666; font-size: 14px;">
+                  Program Director, Starboard
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; background-color: #f9f9f9; border-top: 1px solid #e5e5e5; text-align: center;">
+              <p style="margin: 0 0 10px 0; color: #666666; font-size: 12px; line-height: 1.5;">
+                © ${new Date().getFullYear()} Starboard. All rights reserved.
+              </p>
+              <p style="margin: 0; color: #999999; font-size: 11px; line-height: 1.5;">
+                This is an automated message. Please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `
+
+    // Send the email
+    await EmailService.sendEmail({
+      to: applicantData.email,
+      from: '"Mrs. Maureen Nzekwe - Starboard" <support@mystarboard.ng>',
+      subject: `Application Received - ${application.title}`,
+      html: htmlContent,
+    })
+
+    logger.info('Confirmation email sent successfully', {
+      applicationId: application.id,
+      submissionId: submission.id,
+      applicantEmail: applicantData.email,
+    })
   } catch (error) {
     logger.error('Error in sendConfirmationEmail', {
       error: error.message,
@@ -287,7 +310,7 @@ ${application.workspace?.name || 'The Team'}`,
 // Get submission status for a specific applicant (unchanged)
 export async function GET(request, { params }) {
   const timer = createRequestTimer()
-  const { applicationId } = params
+  const { applicationId } = await params
 
   try {
     const { searchParams } = new URL(request.url)

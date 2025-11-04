@@ -29,7 +29,7 @@ function LoginForm() {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
 
-    // Clear error when user starts typing
+    
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
@@ -54,25 +54,25 @@ function LoginForm() {
 
   const handleWorkspaceRedirect = async () => {
     try {
-      // Set initial workspace context after login
+     
       const workspaceResponse = await fetch('/api/auth/set-initial-workspace', {
         method: 'POST',
       })
 
       if (workspaceResponse.ok) {
-        // User has workspace context, redirect to intended page
+       
         router.push(callbackUrl)
       } else if (workspaceResponse.status === 404) {
-        // No workspace available, redirect to workspace selection/creation
+       
         toast.info('Please select or create a workspace to continue')
         router.push('/workspaces/select')
       } else {
-        // Other error, redirect to dashboard and let it handle
+   
         router.push('/dashboard')
       }
     } catch (error) {
       console.error('Error setting workspace context:', error)
-      // Fallback to dashboard
+     
       router.push('/dashboard')
     }
   }
@@ -124,24 +124,24 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-snow-50 to-neutral-100 px-4">
+    <div className="min-h-screen flex items-center justify-center  px-4">
       <div className="w-full max-w-md">
         {/* Logo & Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-white font-bold text-2xl">S</span>
+          <div className="w-16 h-16  flex items-center justify-center mx-auto mb-4">
+            <img src="/logo-1.svg"/>
           </div>
           <h1 className="text-2xl font-bold text-charcoal-900">Welcome back</h1>
           <p className="text-slate-gray-600 mt-2">Sign in to your Starboard account</p>
         </div>
 
-        <Card className="starboard-card">
+        <Card className="starboard-card border-none">
           <CardHeader className="space-y-1">
             <CardTitle className="text-xl">Sign in</CardTitle>
             <CardDescription>Enter your email and password to access your account</CardDescription>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="border-none">
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email Field */}
               <div className="space-y-2">
@@ -250,7 +250,7 @@ function LoginFallback() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-snow-50 to-neutral-100 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-primary flex items-center justify-center mx-auto mb-4">
             <span className="text-white font-bold text-2xl">S</span>
           </div>
           <h1 className="text-2xl font-bold text-charcoal-900">Welcome back</h1>
