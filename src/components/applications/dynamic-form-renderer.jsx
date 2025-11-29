@@ -160,10 +160,20 @@ export function DynamicFormRenderer({
         break
 
       case 'URL':
+        // Check if URL is empty or invalid
+        if (!value || !value.trim()) {
+          return null // Will be caught by required validation
+        }
+
+        // Check if URL starts with http:// or https://
+        if (!value.startsWith('http://') && !value.startsWith('https://')) {
+          return 'URL must start with http:// or https:// (e.g., https://example.com)'
+        }
+
         try {
           new URL(value)
         } catch {
-          return 'Please enter a valid URL'
+          return 'Please enter a valid URL format (e.g., https://www.example.com or http://example.com)'
         }
         break
 
@@ -422,7 +432,7 @@ export function DynamicFormRenderer({
               type={field.type.toLowerCase()}
               value={value}
               onChange={e => handleValueChange(field.id, e.target.value)}
-              placeholder={field.placeholder}
+              placeholder={field.placeholder || (field.type === 'URL' ? 'https://example.com' : undefined)}
               className={`starboard-input ${error ? 'border-red-500' : ''}`}
               maxLength={field.maxLength}
             />
