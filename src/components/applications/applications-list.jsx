@@ -281,7 +281,7 @@ export function ApplicationsList({ userId, workspaces }) {
 
                 <div className="flex items-center space-x-2 ml-4">
                   <PermissionWrapper permission={PERMISSIONS.APPLICATIONS_REVIEW} fallback={null}>
-                    <Link href={`/applications/${application.id}/submissions`}>
+                    <Link href={`/applications/${application.id}`}>
                       <Button variant="outline" size="sm">
                         <Users className="mr-2 h-4 w-4" />
                         {application.submissionCount || 0}
@@ -290,7 +290,7 @@ export function ApplicationsList({ userId, workspaces }) {
                   </PermissionWrapper>
 
                   <PermissionWrapper permission={PERMISSIONS.ANALYTICS_VIEW} fallback={null}>
-                    <Link href={`/applications/${application.id}/analytics`}>
+                    <Link href={`/applications/${application.id}`}>
                       <Button variant="outline" size="sm">
                         <BarChart3 className="mr-2 h-4 w-4" />
                         Analytics
