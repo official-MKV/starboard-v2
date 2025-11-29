@@ -111,6 +111,8 @@ function handleApiRoutes(request, pathname, isLoggedIn) {
     '/api/invitations/details',
     '/api/onboarding/complete',
     '/api/upload/public/presigned-url',
+    '/api/upload/presigned-url', // Allow presigned URLs for public application submissions
+    '/api/upload/batch-presigned-urls', // Allow batch uploads for applications
     '/api/workspaces/check-slug', // Allow slug checking without auth
   ]
 
