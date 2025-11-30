@@ -168,6 +168,28 @@ export function DemoDaySubmissionModal({ event, onClose, onSuccess }) {
     }))
   }
 
+  // Helper function to validate URL format
+  const isValidUrl = (url) => {
+    if (!url || !url.trim()) return true // Empty is valid (optional field)
+
+    const trimmedUrl = url.trim()
+
+    // Check if it starts with http:// or https://
+    if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) {
+      try {
+        new URL(trimmedUrl)
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    // Check if it's a plain domain (e.g., wes.com, example.co.uk)
+    // Must have at least one dot and valid characters
+    const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-_.]*\.[a-zA-Z]{2,}$/
+    return domainRegex.test(trimmedUrl)
+  }
+
   const validateSubmission = () => {
     const errors = []
 
@@ -177,6 +199,16 @@ export function DemoDaySubmissionModal({ event, onClose, onSuccess }) {
 
     if (!formData.description.trim()) {
       errors.push('Project description is required')
+    }
+
+    // Validate main project URL if provided
+    if (formData.submissionUrl.trim() && !isValidUrl(formData.submissionUrl)) {
+      errors.push('Main Project URL must be a valid URL (e.g., https://example.com, http://example.com, or example.com)')
+    }
+
+    // Validate demo link URL if provided
+    if (uploads.demoLink.url.trim() && !isValidUrl(uploads.demoLink.url)) {
+      errors.push('Demo link must be a valid URL (e.g., https://example.com, http://example.com, or example.com)')
     }
 
     // Check required uploads
@@ -200,9 +232,21 @@ export function DemoDaySubmissionModal({ event, onClose, onSuccess }) {
   }
 
   const handleSubmit = async () => {
+    // Check if any uploads are in progress
+    const uploadsInProgress = Object.values(uploads).some(upload => upload.uploading)
+    if (uploadsInProgress) {
+      toast.error('Please wait for all uploads to complete before submitting')
+      return
+    }
+
     const errors = validateSubmission()
     if (errors.length > 0) {
-      toast.error(errors[0])
+      // Show all errors
+      errors.forEach((error, index) => {
+        setTimeout(() => {
+          toast.error(error)
+        }, index * 100) // Stagger the toasts slightly
+      })
       return
     }
 
@@ -518,12 +562,12 @@ export function DemoDaySubmissionModal({ event, onClose, onSuccess }) {
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleSubmit} 
-              disabled={isSubmitting || Object.values(uploads).some(upload => upload.uploading)}
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
             >
               {isSubmitting ? (
                 <>

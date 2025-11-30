@@ -165,15 +165,16 @@ export function DynamicFormRenderer({
           return null // Will be caught by required validation
         }
 
-        // Check if URL starts with http:// or https://
-        if (!value.startsWith('http://') && !value.startsWith('https://')) {
-          return 'URL must start with http:// or https:// (e.g., https://example.com)'
+        // Normalize URL - add https:// if no protocol is specified
+        let urlToValidate = value.trim()
+        if (!urlToValidate.startsWith('http://') && !urlToValidate.startsWith('https://')) {
+          urlToValidate = 'https://' + urlToValidate
         }
 
         try {
-          new URL(value)
+          new URL(urlToValidate)
         } catch {
-          return 'Please enter a valid URL format (e.g., https://www.example.com or http://example.com)'
+          return 'Please enter a valid URL (e.g., example.com, https://example.com, or http://example.com)'
         }
         break
 
@@ -328,7 +329,19 @@ export function DynamicFormRenderer({
 
   const handleSubmit = async e => {
     e.preventDefault()
-    if (!validateForm()) return
+
+    // Always run validation and show errors
+    const isValid = validateForm()
+
+    if (!isValid) {
+      // Scroll to first error
+      const firstErrorField = fields.find(field => fieldErrors[field.id])
+      if (firstErrorField) {
+        const element = document.getElementById(`field-${firstErrorField.id}`)
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+      return
+    }
 
     // Pass raw form values to parent - let parent handle file uploads
     onSubmit?.(formValues)
@@ -432,7 +445,7 @@ export function DynamicFormRenderer({
               type={field.type.toLowerCase()}
               value={value}
               onChange={e => handleValueChange(field.id, e.target.value)}
-              placeholder={field.placeholder || (field.type === 'URL' ? 'https://example.com' : undefined)}
+              placeholder={field.placeholder || (field.type === 'URL' ? 'example.com or https://example.com' : undefined)}
               className={`starboard-input ${error ? 'border-red-500' : ''}`}
               maxLength={field.maxLength}
             />
@@ -864,7 +877,7 @@ export function DynamicFormRenderer({
         <div className="flex justify-end pt-6 border-t border-neutral-200">
           <Button
             type="submit"
-            disabled={isSubmitting || !isFormValidState}
+            disabled={isSubmitting}
             className="starboard-button min-w-32"
           >
             {isSubmitting ? (

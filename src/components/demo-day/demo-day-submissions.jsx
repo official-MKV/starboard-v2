@@ -334,11 +334,13 @@ export default function DemoDaySubmissionsPage({ params }) {
           {/* Right Main Content - 70% */}
           <div className="flex-1 bg-white overflow-auto">
             {selectedSubmission ? (
-              <SubmissionDetailView 
+              <SubmissionDetailView
                 submission={selectedSubmission}
                 hasUserScored={hasUserScored(selectedSubmission)}
                 currentUserScore={getCurrentUserScore(selectedSubmission)}
                 onStartScoring={() => setShowScoringModal(true)}
+                eventId={eventId}
+                router={router}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-gray-500">
@@ -366,19 +368,29 @@ export default function DemoDaySubmissionsPage({ params }) {
 }
 
 // Submission Detail View Component
-function SubmissionDetailView({ submission, hasUserScored, currentUserScore, onStartScoring }) {
+function SubmissionDetailView({ submission, hasUserScored, currentUserScore, onStartScoring, eventId, router }) {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="border-b pb-4">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              {submission.projectTitle}
-            </h2>
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-2xl font-bold text-gray-900">
+                {submission.projectTitle}
+              </h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/events/${eventId}/submissions/${submission.id}`)}
+              >
+                <Eye className="w-3 h-3 mr-1" />
+                View Full Details
+              </Button>
+            </div>
             <p className="text-gray-600">{submission.description}</p>
           </div>
-          
+
           {hasUserScored && currentUserScore && (
             <div className="ml-4 p-3 bg-green-50 rounded-lg">
               <div className="text-center">
