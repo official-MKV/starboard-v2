@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ["@prisma/client"],
-  },
+  // Next.js 16 moved this from experimental to root level
+  serverExternalPackages: ["@prisma/client"],
+
   images: {
     remotePatterns: [
       {
@@ -25,6 +25,13 @@ const nextConfig = {
       },
     ],
   },
+
+  // Turbopack configuration (Next.js 16 default)
+  turbopack: {
+    // Add turbopack-specific config if needed
+  },
+
+  // Webpack fallback for compatibility
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
@@ -35,6 +42,7 @@ const nextConfig = {
     };
     return config;
   },
+
   // Enable WebSocket support
   async rewrites() {
     return [
