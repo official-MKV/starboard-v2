@@ -21,6 +21,7 @@ export async function GET(request, { params }) {
     // Get query parameters
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const search = searchParams.get('search')
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = parseInt(searchParams.get('limit') || '50', 10)
 
@@ -34,12 +35,13 @@ export async function GET(request, { params }) {
     // Get submissions
     const submissions = await applicationService.findSubmissionsByApplication(applicationId, {
       status,
+      search,
       page,
       limit,
     })
 
     // Get total count for pagination
-    const totalCount = await applicationService.getSubmissionCount(applicationId, { status })
+    const totalCount = await applicationService.getSubmissionCount(applicationId, { status, search })
 
     timer.log('GET', `/api/applications/${applicationId}/submissions`, 200)
 

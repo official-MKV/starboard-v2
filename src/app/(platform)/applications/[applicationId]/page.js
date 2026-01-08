@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { DashboardHeader } from '@/components/dashboard/header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -22,6 +23,9 @@ import {
   Download,
   Loader2,
   AlertCircle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -34,6 +38,13 @@ export default function ApplicationDetailPage({ params }) {
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
+
+  // Pagination and search state
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalSubmissions, setTotalSubmissions] = useState(0)
+  const [itemsPerPage] = useState(10)
 
   useEffect(() => {
     const fetchApplication = async () => {
@@ -69,7 +80,19 @@ export default function ApplicationDetailPage({ params }) {
   const fetchSubmissions = async () => {
     try {
       setIsLoadingSubmissions(true)
-      const response = await fetch(`/api/applications/${applicationId}/submissions`, {
+
+      // Build query parameters
+      const queryParams = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+      })
+
+      // Add search parameter if there's a search term
+      if (searchTerm.trim()) {
+        queryParams.append('search', searchTerm.trim())
+      }
+
+      const response = await fetch(`/api/applications/${applicationId}/submissions?${queryParams}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -83,6 +106,13 @@ export default function ApplicationDetailPage({ params }) {
       const data = await response.json()
       console.log('Submissions API response:', data) // Debug log
       setSubmissions(data.data?.submissions || data.submissions || [])
+
+      // Update pagination state from response
+      if (data.data?.pagination || data.pagination) {
+        const pagination = data.data?.pagination || data.pagination
+        setTotalPages(pagination.totalPages || 1)
+        setTotalSubmissions(pagination.total || 0)
+      }
     } catch (err) {
       console.error('Error fetching submissions:', err)
       toast.error('Failed to load submissions')
@@ -91,11 +121,16 @@ export default function ApplicationDetailPage({ params }) {
     }
   }
 
+  // Debounce search term
   useEffect(() => {
     if (activeTab === 'submissions') {
-      fetchSubmissions()
+      const timer = setTimeout(() => {
+        fetchSubmissions()
+      }, 500) // Wait 500ms after user stops typing
+
+      return () => clearTimeout(timer)
     }
-  }, [activeTab, applicationId])
+  }, [activeTab, applicationId, currentPage, searchTerm])
 
   const getStatusBadge = () => {
     if (!application) return null
@@ -479,7 +514,7 @@ export default function ApplicationDetailPage({ params }) {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Submissions ({submissions.length})</CardTitle>
+                      <CardTitle>Submissions ({totalSubmissions || 0})</CardTitle>
                       <CardDescription>All applications submitted for this form</CardDescription>
                     </div>
                     <Button onClick={fetchSubmissions} disabled={isLoadingSubmissions}>
@@ -495,6 +530,21 @@ export default function ApplicationDetailPage({ params }) {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {/* Search Input */}
+                  <div className="mb-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Search by email..."
+                        value={searchTerm}
+                        onChange={(e) => {
+                          setSearchTerm(e.target.value)
+                          setCurrentPage(1) // Reset to first page on search
+                        }}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
                   {isLoadingSubmissions ? (
                     <div className="text-center py-8">
                       <Loader2 className="h-12 w-12 text-slate-gray-300 mx-auto mb-4 animate-spin" />
@@ -566,13 +616,32 @@ export default function ApplicationDetailPage({ params }) {
                       {submissions.length > 0 && (
                         <div className="flex items-center justify-between pt-4 border-t">
                           <p className="text-sm text-slate-gray-600">
-                            Showing {submissions.length} submission{submissions.length !== 1 ? 's' : ''}
+                            Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
+                            {Math.min(currentPage * itemsPerPage, totalSubmissions)} of {totalSubmissions} submission{totalSubmissions !== 1 ? 's' : ''}
                           </p>
-                          <Link href={`/applications/${applicationId}/submissions`}>
-                            <Button variant="outline" size="sm">
-                              View All Submissions
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                              disabled={currentPage === 1}
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                              Previous
                             </Button>
-                          </Link>
+                            <span className="text-sm text-slate-gray-600">
+                              Page {currentPage} of {totalPages}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                              disabled={currentPage === totalPages}
+                            >
+                              Next
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>

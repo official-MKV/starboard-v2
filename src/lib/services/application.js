@@ -342,14 +342,25 @@ export const applicationService = {
 
   async findSubmissionsByApplication(applicationId, options = {}) {
     try {
-      const { status, page = 1, limit = 10, includeReviewed = true } = options
+      const { status, page = 1, limit = 10, includeReviewed = true, search } = options
+
+      // Build the where clause
+      const whereClause = {
+        applicationId,
+        ...(status ? { status } : {}),
+        ...(includeReviewed ? {} : { status: { not: 'DRAFT' } }),
+      }
+
+      // Add search filter if provided
+      if (search) {
+        whereClause.OR = [
+          { applicantEmail: { contains: search, mode: 'insensitive' } },
+          { user: { email: { contains: search, mode: 'insensitive' } } },
+        ]
+      }
 
       return await prisma.applicationSubmission.findMany({
-        where: {
-          applicationId,
-          ...(status ? { status } : {}),
-          ...(includeReviewed ? {} : { status: { not: 'DRAFT' } }),
-        },
+        where: whereClause,
         include: {
           user: {
             select: {
@@ -543,12 +554,24 @@ export const applicationService = {
 
   async getSubmissionCount(applicationId, options = {}) {
     try {
-      const { status } = options
+      const { status, search } = options
+
+      // Build the where clause
+      const whereClause = {
+        applicationId,
+        ...(status ? { status } : {}),
+      }
+
+      // Add search filter if provided
+      if (search) {
+        whereClause.OR = [
+          { applicantEmail: { contains: search, mode: 'insensitive' } },
+          { user: { email: { contains: search, mode: 'insensitive' } } },
+        ]
+      }
+
       return await prisma.applicationSubmission.count({
-        where: {
-          applicationId,
-          ...(status ? { status } : {}),
-        },
+        where: whereClause,
       })
     } catch (error) {
       throw handleDatabaseError(error)
