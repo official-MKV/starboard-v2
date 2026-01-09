@@ -16,7 +16,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { assignmentId } = params
+    const { assignmentId } = await params
 
     // Get workspace context
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -106,7 +106,7 @@ export async function POST(request, { params }) {
 
     logger.error('Error reassigning mentorship assignment', {
       error: error.message,
-      assignmentId: params.assignmentId,
+      assignmentId: (await params).assignmentId,
     })
     return NextResponse.json(
       { error: { message: 'Failed to reassign mentorship assignment' } },

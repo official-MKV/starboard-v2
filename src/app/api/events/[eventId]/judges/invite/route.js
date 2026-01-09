@@ -33,7 +33,7 @@ export async function POST(request, { params }) {
       )
     }
 
-    const { eventId } = params
+    const { eventId } = await params
     const body = await request.json()
     const { judges, personalMessage } = body
 
@@ -208,8 +208,9 @@ Thank you for your participation!`,
     })
 
   } catch (error) {
+    const { eventId } = await params
     logger.error('Judge invitation error', {
-      eventId: params.eventId,
+      eventId: eventId,
       userId: session?.user?.id,
       error: error.message
     })

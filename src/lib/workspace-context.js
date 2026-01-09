@@ -23,11 +23,11 @@ export class WorkspaceContext {
 
   /**
    * Get current workspace ID from cookies (Server Components)
-   * @returns {string|null} - Workspace ID
+   * @returns {Promise<string|null>} - Workspace ID
    */
-  static getCurrentWorkspaceId() {
+  static async getCurrentWorkspaceId() {
     try {
-      const cookieStore = cookies()
+      const cookieStore = await cookies()
       const workspaceCookie = cookieStore.get(WORKSPACE_COOKIE_NAME)
       return workspaceCookie?.value || null
     } catch (error) {
@@ -88,9 +88,9 @@ export class WorkspaceContext {
    * @param {string} workspaceId - Workspace ID
    * @param {Object} options - Cookie options
    */
-  static setCurrentWorkspace(workspaceId, options = {}) {
+  static async setCurrentWorkspace(workspaceId, options = {}) {
     try {
-      const cookieStore = cookies()
+      const cookieStore = await cookies()
       cookieStore.set(WORKSPACE_COOKIE_NAME, workspaceId, {
         ...this.getCookieConfig(),
         ...options,
@@ -106,9 +106,9 @@ export class WorkspaceContext {
   /**
    * Clear workspace from cookies (Server Components)
    */
-  static clearCurrentWorkspace() {
+  static async clearCurrentWorkspace() {
     try {
-      const cookieStore = cookies()
+      const cookieStore = await cookies()
       cookieStore.delete(WORKSPACE_COOKIE_NAME)
       logger.info('Workspace cleared from cookies')
     } catch (error) {

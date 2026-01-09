@@ -11,7 +11,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { submissionId } = params
+    const { submissionId } = await params
 
     const submission = await prisma.demoDaySubmission.findUnique({
       where: { id: submissionId },
@@ -57,7 +57,7 @@ export async function GET(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to fetch demo day submission', { submissionId: params.submissionId, error: error.message })
+    logger.error('Failed to fetch demo day submission', { submissionId: (await params).submissionId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to fetch submission' } },
       { status: 500 }
@@ -72,7 +72,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { submissionId } = params
+    const { submissionId } = await params
     const body = await request.json()
 
     const submission = await prisma.demoDaySubmission.findFirst({
@@ -120,7 +120,7 @@ export async function PUT(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to update demo day submission', { submissionId: params.submissionId, error: error.message })
+    logger.error('Failed to update demo day submission', { submissionId: (await params).submissionId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to update submission' } },
       { status: 500 }
@@ -135,7 +135,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { submissionId } = params
+    const { submissionId } = await params
 
     const submission = await prisma.demoDaySubmission.findFirst({
       where: { 
@@ -164,7 +164,7 @@ export async function DELETE(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to delete demo day submission', { submissionId: params.submissionId, error: error.message })
+    logger.error('Failed to delete demo day submission', { submissionId: (await params).submissionId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to delete submission' } },
       { status: 500 }

@@ -16,7 +16,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { invitationId } = params
+    const { invitationId } = await params
 
     // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -60,7 +60,7 @@ export async function GET(request, { params }) {
     })
   } catch (error) {
     logger.error('Error fetching invitation', {
-      invitationId: params.invitationId,
+      invitationId: (await params).invitationId,
       error: error.message,
     })
     return NextResponse.json(
@@ -81,7 +81,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { invitationId } = params
+    const { invitationId } = await params
 
     // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -136,7 +136,7 @@ export async function DELETE(request, { params }) {
     })
   } catch (error) {
     logger.error('Error cancelling invitation', {
-      invitationId: params.invitationId,
+      invitationId: (await params).invitationId,
       error: error.message,
     })
     return NextResponse.json(

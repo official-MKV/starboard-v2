@@ -21,7 +21,7 @@ export async function GET(request, { params }) {
       )
     }
 
-    const { eventId } = params
+    const { eventId } = await params
     const { searchParams } = new URL(request.url)
     const judgeId = searchParams.get('judge')
 
@@ -110,8 +110,9 @@ export async function GET(request, { params }) {
     })
 
   } catch (error) {
+    const { eventId } = await params
     logger.error('Progress fetch error', {
-      eventId: params.eventId,
+      eventId: eventId,
       userId: session?.user?.id,
       error: error.message
     })

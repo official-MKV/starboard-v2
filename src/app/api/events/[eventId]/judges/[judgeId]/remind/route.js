@@ -32,7 +32,7 @@ export async function GET(request, { params }) {
       )
     }
 
-    const { eventId } = params
+    const { eventId } = await params
 
     // Verify event belongs to workspace
     const event = await prisma.event.findFirst({
@@ -86,8 +86,9 @@ export async function GET(request, { params }) {
     })
 
   } catch (error) {
+    const { eventId } = await params
     logger.error('Error fetching event judges', {
-      eventId: params.eventId,
+      eventId: eventId,
       userId: session?.user?.id,
       error: error.message
     })

@@ -120,7 +120,7 @@ export const authConfig = {
         if (user?.workspaces && user.workspaces.length > 0) {
           // Set the first workspace as default
           const defaultWorkspace = user.workspaces[0]
-          WorkspaceContext.setCurrentWorkspace(defaultWorkspace.id)
+          await WorkspaceContext.setCurrentWorkspace(defaultWorkspace.id)
 
           logger.info('Initial workspace context set', {
             userId: user.id,

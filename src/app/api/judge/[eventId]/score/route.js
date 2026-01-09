@@ -22,7 +22,7 @@ export async function POST(request, { params }) {
       )
     }
 
-    const { eventId } = params
+    const { eventId } = await params
     const body = await request.json()
     const { 
       judgeId, 
@@ -243,8 +243,9 @@ export async function POST(request, { params }) {
     })
 
   } catch (error) {
+    const { eventId } = await params
     logger.error('Score submission error', {
-      eventId: params.eventId,
+      eventId: eventId,
       userId: session?.user?.id,
       error: error.message
     })

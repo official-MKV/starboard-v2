@@ -16,7 +16,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const eventId = (await params).eventId
 
     // Get event details first to check access and workspace
     const event = await EventService.findById(eventId)
@@ -115,7 +115,7 @@ export async function POST(request, { params }) {
     })
   } catch (error) {
     logger.error('Error registering for event', {
-      eventId: params.eventId,
+      eventId: (await params).eventId,
       userId: session?.user?.id,
       error: error.message,
     })
@@ -137,7 +137,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const eventId = (await params).eventId
 
     // Get event details first
     const event = await EventService.findById(eventId)
@@ -172,7 +172,7 @@ export async function DELETE(request, { params }) {
     })
   } catch (error) {
     logger.error('Error cancelling event registration', {
-      eventId: params.eventId,
+      eventId: (await params).eventId,
       userId: session?.user?.id,
       error: error.message,
     })

@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger'
 
 export async function GET(request, { params }) {
   try {
-    const { eventId } = params
+    const { eventId } = await params
     console.log("this is the demoday id")
     console.log(eventId)
 
@@ -82,8 +82,9 @@ export async function GET(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to fetch public demo day details', { 
-      eventId: params.eventId, 
+    const { eventId } = await params
+    logger.error('Failed to fetch public demo day details', {
+      eventId: eventId, 
       error: error.message 
     })
     return NextResponse.json(

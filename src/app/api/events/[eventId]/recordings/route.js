@@ -17,7 +17,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const eventId = (await params).eventId
 
     // Get event details first to check access
     const event = await EventService.findById(eventId)
@@ -131,7 +131,7 @@ export async function GET(request, { params }) {
     })
   } catch (error) {
     logger.error('Error fetching event recordings', {
-      eventId: params.eventId,
+      eventId: (await params).eventId,
       error: error.message,
     })
     return NextResponse.json(
@@ -152,7 +152,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const eventId = (await params).eventId
 
     // Get event details first to check workspace access
     const event = await EventService.findById(eventId)
@@ -249,7 +249,7 @@ export async function POST(request, { params }) {
     })
   } catch (error) {
     logger.error('Error creating event recording', {
-      eventId: params.eventId,
+      eventId: (await params).eventId,
       error: error.message,
     })
     return NextResponse.json(

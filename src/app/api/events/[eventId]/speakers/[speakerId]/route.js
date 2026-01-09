@@ -17,7 +17,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { id: eventId, speakerId } = params
+    const { id: eventId, speakerId } = await params
 
     // Get event details first to check workspace access
     const event = await EventService.findById(eventId)
@@ -125,7 +125,7 @@ export async function PUT(request, { params }) {
   } catch (error) {
     logger.error('Error updating event speaker', {
       eventId: params.eventId,
-      speakerId: params.speakerId,
+      speakerId: (await params).speakerId,
       error: error.message,
     })
     return NextResponse.json(
@@ -146,7 +146,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { id: eventId, speakerId } = params
+    const { id: eventId, speakerId } = await params
 
     // Get event details first to check workspace access
     const event = await EventService.findById(eventId)
@@ -222,7 +222,7 @@ export async function DELETE(request, { params }) {
   } catch (error) {
     logger.error('Error removing event speaker', {
       eventId: params.eventId,
-      speakerId: params.speakerId,
+      speakerId: (await params).speakerId,
       error: error.message,
     })
     return NextResponse.json(

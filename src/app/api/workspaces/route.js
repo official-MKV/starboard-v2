@@ -21,7 +21,7 @@ export async function GET(request) {
     const workspaces = await WorkspaceService.findByUserId(session.user.id)
 
     // Get current workspace from cookies
-    const currentWorkspaceId = WorkspaceContext.getCurrentWorkspaceId()
+    const currentWorkspaceId = await WorkspaceContext.getCurrentWorkspaceId()
 
     logger.info('User workspaces fetched', {
       userId: session.user.id,

@@ -16,7 +16,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { resourceId } = params
+    const { resourceId } = await params
 
     // Get the resource
     const resource = await ResourceService.findById(resourceId, session.user.id)
@@ -32,7 +32,7 @@ export async function GET(request, { params }) {
     })
   } catch (error) {
     logger.error('Error fetching resource', {
-      resourceId: params.resourceId,
+      resourceId: (await params).resourceId,
       error: error.message,
     })
     return NextResponse.json(
@@ -76,7 +76,7 @@ export async function PUT(request, { params }) {
       )
     }
 
-    const { resourceId } = params
+    const { resourceId } = await params
 
     // Parse form data
     const formData = await request.formData()
@@ -122,7 +122,7 @@ export async function PUT(request, { params }) {
     })
   } catch (error) {
     logger.error('Error updating resource', {
-      resourceId: params.resourceId,
+      resourceId: (await params).resourceId,
       error: error.message,
     })
     return NextResponse.json(
@@ -166,7 +166,7 @@ export async function DELETE(request, { params }) {
       )
     }
 
-    const { resourceId } = params
+    const { resourceId } = await params
 
     // Check if user has access to this specific resource
     const hasAccess = await ResourceService.checkResourceAccess(resourceId, session.user.id)
@@ -191,7 +191,7 @@ export async function DELETE(request, { params }) {
     })
   } catch (error) {
     logger.error('Error deleting resource', {
-      resourceId: params.resourceId,
+      resourceId: (await params).resourceId,
       error: error.message,
     })
     return NextResponse.json(

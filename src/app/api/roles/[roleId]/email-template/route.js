@@ -32,7 +32,7 @@ export async function GET(request, { params }) {
       )
     }
 
-    const { roleId } = params
+    const { roleId } = await params
 
     try {
       const result = await EmailTemplateService.getTemplateVariables(
@@ -64,9 +64,10 @@ export async function GET(request, { params }) {
       throw error
     }
   } catch (error) {
+    const { roleId } = await params
     logger.error('Error fetching role template variables', {
       error: error.message,
-      roleId: params.roleId,
+      roleId: roleId,
       userId: session?.user?.id
     })
 

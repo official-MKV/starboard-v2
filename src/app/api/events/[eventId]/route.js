@@ -13,7 +13,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const { eventId } = await params
     
    
     const event = await EventService.findById(eventId, session.user.id)
@@ -59,7 +59,8 @@ export async function GET(request, { params }) {
       data: { event },
     })
   } catch (error) {
-    logger.error('Error fetching event', { eventId: params.eventId, error: error.message })
+    const { eventId } = await params
+    logger.error('Error fetching event', { eventId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to fetch event' } },
       { status: 500 }
@@ -77,7 +78,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const { eventId } = await params
 
     // Get event details first to check workspace access
     const existingEvent = await EventService.findById(eventId)
@@ -202,7 +203,8 @@ export async function PUT(request, { params }) {
       message: 'Event updated successfully',
     })
   } catch (error) {
-    logger.error('Error updating event', { eventId: params.eventId, error: error.message })
+    const { eventId } = await params
+    logger.error('Error updating event', { eventId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to update event' } },
       { status: 500 }
@@ -221,7 +223,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const { eventId } = await params
 
     // Get event details first to check workspace access
     const existingEvent = await EventService.findById(eventId)
@@ -284,7 +286,8 @@ export async function DELETE(request, { params }) {
       message: 'Event deleted successfully',
     })
   } catch (error) {
-    logger.error('Error deleting event', { eventId: params.eventId, error: error.message })
+    const { eventId } = await params
+    logger.error('Error deleting event', { eventId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to delete event' } },
       { status: 500 }

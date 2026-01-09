@@ -205,19 +205,11 @@ function LoginForm() {
               </Button>
             </form>
 
-            {/* Register Link */}
-            {/* <div className="mt-6 text-center">
-              <p className="text-sm text-slate-gray-600">
-                Don't have an account?{' '}
-                <Link href="/auth/register" className="text-primary hover:underline font-medium">
-                  Sign up
-                </Link>
-              </p>
-            </div> */}
+          
           </CardContent>
         </Card>
 
-        {/* Demo Credentials (Development Only) */}
+         
         {process.env.NODE_ENV === 'development' && (
           <Card className="mt-4 bg-yellow-50 border-yellow-200">
             <CardContent className="pt-6">

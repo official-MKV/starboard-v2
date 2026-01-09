@@ -11,7 +11,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { userId } = params
+    const { userId } = await params
     const isOwnProfile = session.user.id === userId
 
     // Always get workspace context to filter workspace membership
@@ -167,7 +167,7 @@ export async function GET(request, { params }) {
   } catch (error) {
     logger.error('Error fetching user profile', {
       error: error.message,
-      userId: params.userId,
+      userId: (await params).userId,
       stack: error.stack,
     })
     return NextResponse.json(
@@ -184,7 +184,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { userId } = params
+    const { userId } = await params
     const isOwnProfile = session.user.id === userId
 
     if (!isOwnProfile) {
@@ -314,7 +314,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'User not found' } }, { status: 404 })
     }
 
-    logger.error('Error updating user profile', { error: error.message, userId: params.userId })
+    logger.error('Error updating user profile', { error: error.message, userId: (await params).userId })
     return NextResponse.json({ error: { message: 'Failed to update profile' } }, { status: 500 })
   }
 }
@@ -330,7 +330,7 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { userId } = params
+    const { userId } = await params
 
     // Only admins can use PATCH for user management actions
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -398,7 +398,7 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: { message: 'User not found' } }, { status: 404 })
     }
 
-    logger.error('Error updating user status', { error: error.message, userId: params.userId })
+    logger.error('Error updating user status', { error: error.message, userId: (await params).userId })
     return NextResponse.json(
       { error: { message: 'Failed to update user status' } },
       { status: 500 }

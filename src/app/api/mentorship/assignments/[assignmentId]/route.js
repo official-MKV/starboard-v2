@@ -16,7 +16,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { assignmentId } = params
+    const { assignmentId } = await params
 
     // Get workspace context
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -82,7 +82,7 @@ export async function GET(request, { params }) {
 
     logger.error('Error fetching mentorship assignment', {
       error: error.message,
-      assignmentId: params.assignmentId,
+      assignmentId: (await params).assignmentId,
     })
     return NextResponse.json(
       { error: { message: 'Failed to fetch mentorship assignment' } },
@@ -102,7 +102,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { assignmentId } = params
+    const { assignmentId } = await params
 
     // Get workspace context
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -181,7 +181,7 @@ export async function PUT(request, { params }) {
 
     logger.error('Error updating mentorship assignment', {
       error: error.message,
-      assignmentId: params.assignmentId,
+      assignmentId: (await params).assignmentId,
     })
     return NextResponse.json(
       { error: { message: 'Failed to update mentorship assignment' } },
@@ -201,7 +201,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { assignmentId } = params
+    const { assignmentId } = await params
 
     // Get workspace context
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -258,7 +258,7 @@ export async function DELETE(request, { params }) {
 
     logger.error('Error terminating mentorship assignment', {
       error: error.message,
-      assignmentId: params.assignmentId,
+      assignmentId: (await params).assignmentId,
     })
     return NextResponse.json(
       { error: { message: 'Failed to terminate mentorship assignment' } },

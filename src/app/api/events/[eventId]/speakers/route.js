@@ -17,7 +17,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const eventId = (await params).eventId
 
     // Get event details first to check access
     const event = await EventService.findById(eventId)
@@ -66,7 +66,7 @@ export async function GET(request, { params }) {
       data: { speakers },
     })
   } catch (error) {
-    logger.error('Error fetching event speakers', { eventId: params.eventId, error: error.message })
+    logger.error('Error fetching event speakers', { eventId: (await params).eventId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to fetch speakers' } },
       { status: 500 }
@@ -85,7 +85,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const eventId = (await params).eventId
 
     // Get event details first to check workspace access
     const event = await EventService.findById(eventId)
@@ -187,7 +187,7 @@ export async function POST(request, { params }) {
       message: 'Speaker added successfully',
     })
   } catch (error) {
-    logger.error('Error adding event speaker', { eventId: params.eventId, error: error.message })
+    logger.error('Error adding event speaker', { eventId: (await params).eventId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to add speaker' } },
       { status: 500 }
@@ -206,7 +206,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const eventId = params.eventId
+    const eventId = (await params).eventId
 
     // Get event details first to check workspace access
     const event = await EventService.findById(eventId)
@@ -268,7 +268,7 @@ export async function PUT(request, { params }) {
       message: 'Speaker order updated successfully',
     })
   } catch (error) {
-    logger.error('Error updating speaker order', { eventId: params.eventId, error: error.message })
+    logger.error('Error updating speaker order', { eventId: (await params).eventId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to update speaker order' } },
       { status: 500 }

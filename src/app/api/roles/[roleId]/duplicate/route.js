@@ -16,7 +16,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { roleId } = params
+    const { roleId } = await params
 
     // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -83,7 +83,7 @@ export async function POST(request, { params }) {
     })
   } catch (error) {
     logger.error('Error duplicating role', {
-      roleId: params.roleId,
+      roleId: (await params).roleId,
       error: error.message,
     })
     return NextResponse.json(

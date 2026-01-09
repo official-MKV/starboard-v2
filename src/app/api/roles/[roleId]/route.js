@@ -16,7 +16,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { roleId } = params
+    const { roleId } = await params
 
     // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -60,7 +60,7 @@ export async function GET(request, { params }) {
       data: { role },
     })
   } catch (error) {
-    logger.error('Error fetching role', { roleId: params.roleId, error: error.message })
+    logger.error('Error fetching role', { roleId: (await params).roleId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to fetch role' } },
       { status: 500 }
@@ -79,7 +79,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { roleId } = params
+    const { roleId } = await params
 
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
@@ -169,7 +169,7 @@ export async function PUT(request, { params }) {
       message: 'Role updated successfully',
     })
   } catch (error) {
-    logger.error('Error updating role', { roleId: params.roleId, error: error.message })
+    logger.error('Error updating role', { roleId: (await params).roleId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to update role' } },
       { status: 500 }
@@ -188,7 +188,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { roleId } = params
+    const { roleId } = await params
     console.log(roleId)
 
     // Get workspace context from cookies
@@ -243,7 +243,7 @@ export async function DELETE(request, { params }) {
     })
   } catch (error) {
     console.log(error)
-    logger.error('Error deleting role', { roleId: params.roleId, error: error.message })
+    logger.error('Error deleting role', { roleId: (await params).roleId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to delete role' } },
       { status: 500 }

@@ -8,7 +8,11 @@
       "Bash(npm view:*)",
       "Bash(npm audit)",
       "Bash(npm audit fix:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "WebSearch",
+      "Bash(nslookup:*)",
+      "Bash(Test-NetConnection -ComputerName aws-0-us-west-1.pooler.supabase.com -Port 6543)",
+      "Bash(powershell:*)"
     ],
     "deny": [],
     "ask": []

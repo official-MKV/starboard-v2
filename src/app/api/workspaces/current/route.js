@@ -83,7 +83,7 @@ export async function DELETE(request) {
     }
 
     // Clear workspace context
-    WorkspaceContext.clearCurrentWorkspace()
+    await WorkspaceContext.clearCurrentWorkspace()
 
     logger.info('Workspace context cleared', {
       userId: session.user.id,

@@ -10,7 +10,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { eventId } = params
+    const { eventId } = await params
 
     const results = await DemoDayService.exportResults(eventId)
 
@@ -76,7 +76,8 @@ export async function GET(request, { params }) {
     return response
 
   } catch (error) {
-    logger.error('Failed to export demo day results', { eventId: params.eventId, error: error.message })
+    const { eventId } = await params
+    logger.error('Failed to export demo day results', { eventId: eventId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to export results' } },
       { status: 500 }

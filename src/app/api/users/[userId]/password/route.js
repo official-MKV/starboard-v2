@@ -16,7 +16,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { userId } = params
+    const { userId } = await params
 
     // Users can only change their own password
     if (session.user.id !== userId) {
@@ -95,7 +95,7 @@ export async function PUT(request, { params }) {
       message: 'Password updated successfully',
     })
   } catch (error) {
-    logger.error('Error changing password', { error: error.message, userId: params.userId })
+    logger.error('Error changing password', { error: error.message, userId: (await params).userId })
     return NextResponse.json({ error: { message: 'Failed to change password' } }, { status: 500 })
   }
 }

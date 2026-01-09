@@ -32,7 +32,7 @@ export async function DELETE(request, { params }) {
       )
     }
 
-    const { eventId, judgeId } = params
+    const { eventId, judgeId } = await params
 
     // Verify event belongs to workspace and get judge info
     const event = await prisma.event.findFirst({
@@ -97,9 +97,10 @@ export async function DELETE(request, { params }) {
     })
 
   } catch (error) {
+    const { eventId, judgeId } = await params
     logger.error('Remove judge error', {
-      eventId: params.eventId,
-      judgeId: params.judgeId,
+      eventId: eventId,
+      judgeId: judgeId,
       userId: session?.user?.id,
       error: error.message
     })

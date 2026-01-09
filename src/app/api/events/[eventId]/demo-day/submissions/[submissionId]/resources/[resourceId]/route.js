@@ -10,7 +10,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { resourceId } = params
+    const { resourceId } = await params
     const body = await request.json()
 
     const resource = await prisma.demoDayResource.findUnique({
@@ -48,7 +48,7 @@ export async function PUT(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to update resource', { resourceId: params.resourceId, error: error.message })
+    logger.error('Failed to update resource', { resourceId: (await params).resourceId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to update resource' } },
       { status: 500 }
@@ -63,7 +63,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { resourceId } = params
+    const { resourceId } = await params
 
     const resource = await prisma.demoDayResource.findUnique({
       where: { id: resourceId },
@@ -96,7 +96,7 @@ export async function DELETE(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to delete resource', { resourceId: params.resourceId, error: error.message })
+    logger.error('Failed to delete resource', { resourceId: (await params).resourceId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to delete resource' } },
       { status: 500 }

@@ -15,7 +15,7 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { meetingId } = params
+    const { meetingId } = await params
 
     // Get workspace context
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
@@ -78,7 +78,7 @@ export async function PUT(request, { params }) {
 
     logger.error('Error completing meeting', {
       error: error.message,
-      meetingId: params.meetingId,
+      meetingId: (await params).meetingId,
     })
     return NextResponse.json({ error: { message: 'Failed to complete meeting' } }, { status: 500 })
   }

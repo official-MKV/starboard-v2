@@ -15,7 +15,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { resourceId } = params
+    const { resourceId } = await params
 
     // Generate download URL
     const result = await ResourceService.getDownloadUrl(resourceId, session.user.id)
@@ -31,7 +31,7 @@ export async function GET(request, { params }) {
     })
   } catch (error) {
     logger.error('Error generating download URL', {
-      resourceId: params.resourceId,
+      resourceId: (await params).resourceId,
       error: error.message,
     })
     return NextResponse.json(

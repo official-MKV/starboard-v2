@@ -11,7 +11,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { eventId } = params
+    const { eventId } = await params
 
     const eligibility = await DemoDayService.canUserSubmit(eventId, session.user.id)
 
@@ -65,7 +65,8 @@ export async function GET(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to check demo day eligibility', { eventId: params.eventId, error: error.message })
+    const { eventId } = await params
+    logger.error('Failed to check demo day eligibility', { eventId: eventId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to check eligibility' } },
       { status: 500 }

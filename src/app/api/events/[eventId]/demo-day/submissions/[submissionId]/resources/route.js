@@ -10,7 +10,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { eventId } = params
+    const { eventId } = await params
 
     const judges = await prisma.demoDayJudge.findMany({
       where: { eventId },
@@ -39,7 +39,7 @@ export async function GET(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to fetch demo day judges', { eventId: params.eventId, error: error.message })
+    logger.error('Failed to fetch demo day judges', { eventId: (await params).eventId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to fetch judges' } },
       { status: 500 }
@@ -54,7 +54,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { eventId } = params
+    const { eventId } = await params
     const body = await request.json()
     const {
       judgeId,
@@ -119,7 +119,7 @@ export async function POST(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to assign demo day judge', { eventId: params.eventId, error: error.message })
+    logger.error('Failed to assign demo day judge', { eventId: (await params).eventId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to assign judge' } },
       { status: 500 }
@@ -134,7 +134,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { eventId } = params
+    const { eventId } = await params
     const { searchParams } = new URL(request.url)
     const judgeId = searchParams.get('judgeId')
 
@@ -197,7 +197,7 @@ export async function DELETE(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to remove demo day judge', { eventId: params.eventId, error: error.message })
+    logger.error('Failed to remove demo day judge', { eventId: (await params).eventId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to remove judge' } },
       { status: 500 }

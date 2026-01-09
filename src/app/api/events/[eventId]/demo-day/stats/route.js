@@ -11,7 +11,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { eventId } = params
+    const { eventId } = await params
 
     const stats = await DemoDayService.getDemoDayStats(eventId)
 
@@ -144,7 +144,8 @@ const judgeProgressWithCounts = await Promise.all(
     })
 
   } catch (error) {
-    logger.error('Failed to fetch demo day stats', { eventId: params.eventId, error: error.message })
+    const { eventId } = await params
+    logger.error('Failed to fetch demo day stats', { eventId: eventId, error: error.message })
     return NextResponse.json(
       { error: { message: 'Failed to fetch stats' } },
       { status: 500 }

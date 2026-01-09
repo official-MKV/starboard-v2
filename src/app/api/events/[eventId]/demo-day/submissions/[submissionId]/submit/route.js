@@ -11,7 +11,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
-    const { submissionId } = params
+    const { submissionId } = await params
 
     const submission = await DemoDayService.submitSubmission(submissionId, session.user.id)
 
@@ -21,7 +21,8 @@ export async function POST(request, { params }) {
     })
 
   } catch (error) {
-    logger.error('Failed to submit demo day submission', { submissionId: params.submissionId, error: error.message })
+    const { submissionId } = await params
+    logger.error('Failed to submit demo day submission', { submissionId: submissionId, error: error.message })
     return NextResponse.json(
       { error: { message: error.message || 'Failed to submit submission' } },
       { status: 500 }

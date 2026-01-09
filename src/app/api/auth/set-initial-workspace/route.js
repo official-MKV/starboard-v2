@@ -12,7 +12,7 @@ export async function POST(request) {
     }
 
     // Check if user already has workspace context
-    const existingWorkspaceId = WorkspaceContext.getCurrentWorkspaceId()
+    const existingWorkspaceId = await WorkspaceContext.getCurrentWorkspaceId()
     if (existingWorkspaceId) {
       // Verify the existing workspace is still valid
       const access = await WorkspaceContext.checkWorkspaceAccess(
