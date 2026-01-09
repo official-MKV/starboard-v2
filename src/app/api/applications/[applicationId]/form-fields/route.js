@@ -38,6 +38,8 @@ const updateFormFieldsSchema = z.object({
 })
 
 export async function PUT(request, { params }) {
+  // Await params for Next.js 15+ compatibility
+  const { applicationId } = await params
   const timer = createRequestTimer()
   let session = null
   let requestBody = null
@@ -46,14 +48,14 @@ export async function PUT(request, { params }) {
     session = await auth()
 
     if (!session?.user?.id) {
-      timer.log('PUT', `/api/applications/${params.applicationId}/form-fields`, 401)
+      timer.log('PUT', `/api/applications/${applicationId}/form-fields`, 401)
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
     // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
-      timer.log('PUT', `/api/applications/${params.applicationId}/form-fields`, 400)
+      timer.log('PUT', `/api/applications/${applicationId}/form-fields`, 400)
       return NextResponse.json(
         { error: { message: 'Workspace context required' } },
         { status: 400 }
@@ -68,7 +70,7 @@ export async function PUT(request, { params }) {
     )
 
     if (!hasPermission) {
-      timer.log('PUT', `/api/applications/${params.applicationId}/form-fields`, 403)
+      timer.log('PUT', `/api/applications/${applicationId}/form-fields`, 403)
       return NextResponse.json(
         { error: { message: 'Insufficient permissions to update application form fields' } },
         { status: 403 }
@@ -77,7 +79,7 @@ export async function PUT(request, { params }) {
 
     logger.apiRequest(
       'PUT',
-      `/api/applications/${params.applicationId}/form-fields`,
+      `/api/applications/${applicationId}/form-fields`,
       session.user.id
     )
 
@@ -91,7 +93,7 @@ export async function PUT(request, { params }) {
       })
       timer.log(
         'PUT',
-        `/api/applications/${params.applicationId}/form-fields`,
+        `/api/applications/${applicationId}/form-fields`,
         400,
         session.user.id
       )
@@ -112,7 +114,7 @@ export async function PUT(request, { params }) {
       })
       timer.log(
         'PUT',
-        `/api/applications/${params.applicationId}/form-fields`,
+        `/api/applications/${applicationId}/form-fields`,
         400,
         session.user.id
       )
@@ -131,14 +133,14 @@ export async function PUT(request, { params }) {
     const { formFields } = validation.data
 
     // Check if application exists and belongs to workspace
-    const existingApplication = await applicationService.findById(params.applicationId)
+    const existingApplication = await applicationService.findById(applicationId)
     if (!existingApplication) {
-      timer.log('PUT', `/api/applications/${params.applicationId}/form-fields`, 404)
+      timer.log('PUT', `/api/applications/${applicationId}/form-fields`, 404)
       return NextResponse.json({ error: { message: 'Application not found' } }, { status: 404 })
     }
 
     if (existingApplication.workspaceId !== workspaceContext.workspaceId) {
-      timer.log('PUT', `/api/applications/${params.applicationId}/form-fields`, 403)
+      timer.log('PUT', `/api/applications/${applicationId}/form-fields`, 403)
       return NextResponse.json(
         { error: { message: 'Access denied to this application' } },
         { status: 403 }
@@ -147,31 +149,31 @@ export async function PUT(request, { params }) {
 
     // Update form fields
     const updatedApplication = await applicationService.updateFormFields(
-      params.applicationId,
+      applicationId,
       formFields
     )
 
     logger.info('Application form fields updated successfully', {
       userId: session.user.id,
-      applicationId: params.applicationId,
+      applicationId: applicationId,
       fieldCount: formFields.length,
       workspaceId: workspaceContext.workspaceId,
     })
 
-    timer.log('PUT', `/api/applications/${params.applicationId}/form-fields`, 200, session.user.id)
+    timer.log('PUT', `/api/applications/${applicationId}/form-fields`, 200, session.user.id)
 
     return NextResponse.json({ application: updatedApplication })
   } catch (error) {
     logger.apiError(
       'PUT',
-      `/api/applications/${params.applicationId}/form-fields`,
+      `/api/applications/${applicationId}/form-fields`,
       error,
       session?.user?.id,
       requestBody
     )
     timer.log(
       'PUT',
-      `/api/applications/${params.applicationId}/form-fields`,
+      `/api/applications/${applicationId}/form-fields`,
       500,
       session?.user?.id
     )
@@ -183,20 +185,22 @@ export async function PUT(request, { params }) {
 }
 
 export async function GET(request, { params }) {
+  // Await params for Next.js 15+ compatibility
+  const { applicationId } = await params
   const timer = createRequestTimer()
 
   try {
     const session = await auth()
 
     if (!session?.user?.id) {
-      timer.log('GET', `/api/applications/${params.applicationId}/form-fields`, 401)
+      timer.log('GET', `/api/applications/${applicationId}/form-fields`, 401)
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
     // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
-      timer.log('GET', `/api/applications/${params.applicationId}/form-fields`, 400)
+      timer.log('GET', `/api/applications/${applicationId}/form-fields`, 400)
       return NextResponse.json(
         { error: { message: 'Workspace context required' } },
         { status: 400 }
@@ -211,7 +215,7 @@ export async function GET(request, { params }) {
     )
 
     if (!hasPermission) {
-      timer.log('GET', `/api/applications/${params.applicationId}/form-fields`, 403)
+      timer.log('GET', `/api/applications/${applicationId}/form-fields`, 403)
       return NextResponse.json(
         { error: { message: 'Insufficient permissions to view application form fields' } },
         { status: 403 }
@@ -220,39 +224,39 @@ export async function GET(request, { params }) {
 
     logger.apiRequest(
       'GET',
-      `/api/applications/${params.applicationId}/form-fields`,
+      `/api/applications/${applicationId}/form-fields`,
       session.user.id
     )
 
-    const application = await applicationService.findById(params.applicationId)
+    const application = await applicationService.findById(applicationId)
 
     if (!application) {
-      timer.log('GET', `/api/applications/${params.applicationId}/form-fields`, 404)
+      timer.log('GET', `/api/applications/${applicationId}/form-fields`, 404)
       return NextResponse.json({ error: { message: 'Application not found' } }, { status: 404 })
     }
 
     // Check if application belongs to user's workspace
     if (application.workspaceId !== workspaceContext.workspaceId) {
-      timer.log('GET', `/api/applications/${params.applicationId}/form-fields`, 403)
+      timer.log('GET', `/api/applications/${applicationId}/form-fields`, 403)
       return NextResponse.json(
         { error: { message: 'Access denied to this application' } },
         { status: 403 }
       )
     }
 
-    timer.log('GET', `/api/applications/${params.applicationId}/form-fields`, 200, session.user.id)
+    timer.log('GET', `/api/applications/${applicationId}/form-fields`, 200, session.user.id)
 
     return NextResponse.json({ formFields: application.formFields || [] })
   } catch (error) {
     logger.apiError(
       'GET',
-      `/api/applications/${params.applicationId}/form-fields`,
+      `/api/applications/${applicationId}/form-fields`,
       error,
       session?.user?.id
     )
     timer.log(
       'GET',
-      `/api/applications/${params.applicationId}/form-fields`,
+      `/api/applications/${applicationId}/form-fields`,
       500,
       session?.user?.id
     )

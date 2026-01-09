@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,8 @@ import { formatDate, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { DynamicFormRenderer } from '@/components/applications/dynamic-form-renderer'
 export default function ApplicationDetailPage({ params }) {
-  const { applicationId } = params
+  // Unwrap params Promise for Next.js 15+ compatibility
+  const { applicationId } = use(params)
   const [application, setApplication] = useState(null)
   const [submissions, setSubmissions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -39,12 +40,13 @@ export default function ApplicationDetailPage({ params }) {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
 
-  // Pagination and search state
+ 
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalSubmissions, setTotalSubmissions] = useState(0)
   const [itemsPerPage] = useState(10)
+  console.log(applicationId)
 
   useEffect(() => {
     const fetchApplication = async () => {

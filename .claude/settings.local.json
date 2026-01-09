@@ -12,7 +12,10 @@
       "WebSearch",
       "Bash(nslookup:*)",
       "Bash(Test-NetConnection -ComputerName aws-0-us-west-1.pooler.supabase.com -Port 6543)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(npm run dev:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

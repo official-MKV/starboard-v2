@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
@@ -152,7 +152,8 @@ export default function SubmissionDetailPage({ params }) {
   const router = useRouter()
   const { data: session } = useSession()
 
-  const { applicationId, submissionId } = params
+  // Unwrap params Promise for Next.js 15+ compatibility
+  const { applicationId, submissionId } = use(params)
 
   // Fetch submission details
   const { data: submissionData, isLoading } = useQuery({

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -66,7 +66,8 @@ export default function EventDetailPage({ params }) {
   const [showSubmissionModal, setShowSubmissionModal] = useState(false)
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview')
 
-  const eventId = params.eventId
+  // Unwrap params Promise for Next.js 15+ compatibility
+  const { eventId } = use(params)
 
   const {
     data: eventData,

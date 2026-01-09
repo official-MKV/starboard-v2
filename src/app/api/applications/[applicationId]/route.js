@@ -84,12 +84,12 @@ export async function GET(request, { params }) {
       },
     }
 
-    timer.log('GET', `/api/applications/${params.applicationId}`, 200, session.user.id)
+    timer.log('GET', `/api/applications/${applicationId}`, 200, session.user.id)
 
     return NextResponse.json({ application: responseData })
   } catch (error) {
-    logger.apiError('GET', `/api/applications/${params.applicationId}`, error, session?.user?.id)
-    timer.log('GET', `/api/applications/${params.applicationId}`, 500, session?.user?.id)
+    logger.apiError('GET', `/api/applications/${applicationId}`, error, session?.user?.id)
+    timer.log('GET', `/api/applications/${applicationId}`, 500, session?.user?.id)
     return NextResponse.json(
       { error: { message: error.message || 'Failed to fetch application' } },
       { status: 500 }
@@ -272,20 +272,22 @@ export async function PUT(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
+  // Await params for Next.js 15+ compatibility
+  const { applicationId } = await params
   const timer = createRequestTimer()
 
   try {
     const session = await auth()
 
     if (!session?.user?.id) {
-      timer.log('DELETE', `/api/applications/${params.applicationId}`, 401)
+      timer.log('DELETE', `/api/applications/${applicationId}`, 401)
       return NextResponse.json({ error: { message: 'Authentication required' } }, { status: 401 })
     }
 
     // Get workspace context from cookies
     const workspaceContext = await WorkspaceContext.getWorkspaceContext(request, session.user.id)
     if (!workspaceContext) {
-      timer.log('DELETE', `/api/applications/${params.applicationId}`, 400)
+      timer.log('DELETE', `/api/applications/${applicationId}`, 400)
       return NextResponse.json(
         { error: { message: 'Workspace context required' } },
         { status: 400 }
@@ -300,24 +302,24 @@ export async function DELETE(request, { params }) {
     )
 
     if (!hasPermission) {
-      timer.log('DELETE', `/api/applications/${params.applicationId}`, 403)
+      timer.log('DELETE', `/api/applications/${applicationId}`, 403)
       return NextResponse.json(
         { error: { message: 'Insufficient permissions to delete application' } },
         { status: 403 }
       )
     }
 
-    logger.apiRequest('DELETE', `/api/applications/${params.applicationId}`, session.user.id)
+    logger.apiRequest('DELETE', `/api/applications/${applicationId}`, session.user.id)
 
     // Check if application exists and belongs to workspace
-    const existingApplication = await applicationService.findById(params.applicationId)
+    const existingApplication = await applicationService.findById(applicationId)
     if (!existingApplication) {
-      timer.log('DELETE', `/api/applications/${params.applicationId}`, 404)
+      timer.log('DELETE', `/api/applications/${applicationId}`, 404)
       return NextResponse.json({ error: { message: 'Application not found' } }, { status: 404 })
     }
 
     if (existingApplication.workspaceId !== workspaceContext.workspaceId) {
-      timer.log('DELETE', `/api/applications/${params.applicationId}`, 403)
+      timer.log('DELETE', `/api/applications/${applicationId}`, 403)
       return NextResponse.json(
         { error: { message: 'Access denied to this application' } },
         { status: 403 }
@@ -325,20 +327,20 @@ export async function DELETE(request, { params }) {
     }
 
     // Delete the application
-    await applicationService.delete(params.applicationId)
+    await applicationService.delete(applicationId)
 
     logger.info('Application deleted successfully', {
       userId: session.user.id,
-      applicationId: params.applicationId,
+      applicationId: applicationId,
       workspaceId: workspaceContext.workspaceId,
     })
 
-    timer.log('DELETE', `/api/applications/${params.applicationId}`, 200, session.user.id)
+    timer.log('DELETE', `/api/applications/${applicationId}`, 200, session.user.id)
 
     return NextResponse.json({ message: 'Application deleted successfully' })
   } catch (error) {
-    logger.apiError('DELETE', `/api/applications/${params.applicationId}`, error, session?.user?.id)
-    timer.log('DELETE', `/api/applications/${params.applicationId}`, 500, session?.user?.id)
+    logger.apiError('DELETE', `/api/applications/${applicationId}`, error, session?.user?.id)
+    timer.log('DELETE', `/api/applications/${applicationId}`, 500, session?.user?.id)
     return NextResponse.json(
       { error: { message: error.message || 'Failed to delete application' } },
       { status: 500 }
