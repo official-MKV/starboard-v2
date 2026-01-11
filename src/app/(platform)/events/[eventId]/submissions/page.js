@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
@@ -81,7 +81,8 @@ export default function DemoDaySubmissionsPage({ params }) {
   const [showScoringModal, setShowScoringModal] = useState(false)
   const [filePreviewModal, setFilePreviewModal] = useState(null) // { resource, fileType }
 
-  const eventId = params.eventId
+  // Unwrap params Promise for Next.js 15+ compatibility
+  const { eventId } = use(params)
 
   // Fetch event details with demo day config
   const { data: eventData } = useQuery({

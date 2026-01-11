@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,8 @@ import { Save, ArrowLeft, Loader2, AlertCircle, FileText, Calendar, Settings } f
 import { toast } from 'sonner'
 
 export default function EditApplicationPage({ params }) {
-  const { applicationId } = params
+  // Unwrap params Promise for Next.js 15+ compatibility
+  const { applicationId } = use(params)
   const router = useRouter()
 
   const [application, setApplication] = useState(null)

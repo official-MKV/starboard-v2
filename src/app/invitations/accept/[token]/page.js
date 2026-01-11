@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -473,7 +473,9 @@ async function uploadFileToS3(file, presignedData) {
 
 export default function InvitationAcceptPage({ params }) {
   const router = useRouter()
-  const { token } = params
+
+  // Unwrap params Promise for Next.js 15+ compatibility
+  const { token } = use(params)
 
   // State management
   const [currentStep, setCurrentStep] = useState('loading')
