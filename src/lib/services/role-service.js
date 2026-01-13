@@ -137,8 +137,34 @@ The {{workspace_name}} Team`
             },
           })
 
+          // Parse permissions if it's a JSON string
+          let permissions = role.permissions
+          if (typeof permissions === 'string') {
+            try {
+              permissions = JSON.parse(permissions)
+            } catch (e) {
+              permissions = []
+            }
+          }
+          // Ensure permissions is always an array
+          if (!Array.isArray(permissions)) {
+            permissions = []
+          }
+
+          // Parse onboardingForm if it's a JSON string
+          let onboardingForm = role.onboardingForm
+          if (typeof onboardingForm === 'string') {
+            try {
+              onboardingForm = JSON.parse(onboardingForm)
+            } catch (e) {
+              onboardingForm = null
+            }
+          }
+
           return {
             ...role,
+            permissions,
+            onboardingForm,
             emailTemplates,
           }
         })
@@ -198,8 +224,34 @@ The {{workspace_name}} Team`
         },
       })
 
+      // Parse permissions if it's a JSON string
+      let permissions = role.permissions
+      if (typeof permissions === 'string') {
+        try {
+          permissions = JSON.parse(permissions)
+        } catch (e) {
+          permissions = []
+        }
+      }
+      // Ensure permissions is always an array
+      if (!Array.isArray(permissions)) {
+        permissions = []
+      }
+
+      // Parse onboardingForm if it's a JSON string
+      let onboardingForm = role.onboardingForm
+      if (typeof onboardingForm === 'string') {
+        try {
+          onboardingForm = JSON.parse(onboardingForm)
+        } catch (e) {
+          onboardingForm = null
+        }
+      }
+
       return {
         ...role,
+        permissions,
+        onboardingForm,
         emailTemplates,
       }
     } catch (error) {
@@ -215,16 +267,6 @@ The {{workspace_name}} Team`
    */
   static async update(roleId, updates) {
     try {
-      // Don't allow updating system roles
-      const existingRole = await prisma.role.findUnique({
-        where: { id: roleId },
-        select: { isSystem: true, name: true, workspaceId: true },
-      })
-
-      if (existingRole?.isSystem) {
-        throw new Error('Cannot update system role')
-      }
-
       const role = await prisma.$transaction(async tx => {
         // Update the role
         const updatedRole = await tx.role.update({
@@ -493,6 +535,31 @@ static getAvailablePermissions() {
             key: PERMISSIONS.APPLICATIONS_EXPORT,
             label: 'Export Applications',
             description: 'Export application data and reports',
+          },
+          {
+            key: PERMISSIONS.EVALUATION_SCORE,
+            label: 'Score Submissions',
+            description: 'Score submissions in evaluation pipeline (Evaluator)',
+          },
+          {
+            key: PERMISSIONS.EVALUATION_VIEW_SCORES,
+            label: 'View Evaluation Scores',
+            description: 'View aggregate and individual evaluation scores',
+          },
+          {
+            key: PERMISSIONS.EVALUATION_MANAGE,
+            label: 'Manage Evaluations',
+            description: 'Configure evaluation steps and criteria',
+          },
+          {
+            key: PERMISSIONS.EVALUATION_ADVANCE,
+            label: 'Advance Candidates',
+            description: 'Manually advance candidates to next evaluation step',
+          },
+          {
+            key: PERMISSIONS.EVALUATION_ADMIT,
+            label: 'Admit Candidates',
+            description: 'Admit candidates (final approval)',
           },
         ],
       },

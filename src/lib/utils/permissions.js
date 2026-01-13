@@ -35,6 +35,13 @@ export const PERMISSIONS = {
   APPLICATIONS_REJECT: 'applications.reject',
   APPLICATIONS_EXPORT: 'applications.export',
 
+  // Application Evaluation
+  EVALUATION_SCORE: 'evaluation.score',
+  EVALUATION_VIEW_SCORES: 'evaluation.view_scores',
+  EVALUATION_MANAGE: 'evaluation.manage',
+  EVALUATION_ADVANCE: 'evaluation.advance',
+  EVALUATION_ADMIT: 'evaluation.admit',
+
   // Events
   EVENTS_VIEW: 'events.view',
   EVENTS_MANAGE: 'events.manage',

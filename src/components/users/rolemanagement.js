@@ -1060,7 +1060,7 @@ export default function RoleManagement() {
                     value={roleForm.name}
                     onChange={e => setRoleForm(prev => ({ ...prev, name: e.target.value }))}
                     className="starboard-input"
-                    disabled={selectedRole?.isSystem}
+                    disabled={false}
                   />
                 </div>
                 <div>
@@ -1072,13 +1072,13 @@ export default function RoleManagement() {
                       value={roleForm.color}
                       onChange={e => setRoleForm(prev => ({ ...prev, color: e.target.value }))}
                       className="w-12 h-10 rounded border border-gray-300"
-                      disabled={selectedRole?.isSystem}
+                      disabled={false}
                     />
                     <Input
                       value={roleForm.color}
                       onChange={e => setRoleForm(prev => ({ ...prev, color: e.target.value }))}
                       className="starboard-input flex-1"
-                      disabled={selectedRole?.isSystem}
+                      disabled={false}
                     />
                   </div>
                 </div>
@@ -1092,7 +1092,7 @@ export default function RoleManagement() {
                   onChange={e => setRoleForm(prev => ({ ...prev, description: e.target.value }))}
                   rows={3}
                   className="starboard-input"
-                  disabled={selectedRole?.isSystem}
+                  disabled={false}
                 />
               </div>
 
@@ -1115,7 +1115,7 @@ export default function RoleManagement() {
                       onCheckedChange={checked =>
                         setRoleForm(prev => ({ ...prev, canMentor: checked }))
                       }
-                      disabled={selectedRole?.isSystem}
+                      disabled={false}
                     />
                     <div className="flex-1">
                       <Label htmlFor="editCanMentor" className="text-sm font-medium cursor-pointer">
@@ -1134,7 +1134,7 @@ export default function RoleManagement() {
                       onCheckedChange={checked =>
                         setRoleForm(prev => ({ ...prev, canBeMentee: checked }))
                       }
-                      disabled={selectedRole?.isSystem}
+                      disabled={false}
                     />
                     <div className="flex-1">
                       <Label
@@ -1150,17 +1150,6 @@ export default function RoleManagement() {
                   </div>
                 </div>
               </div>
-
-              {selectedRole?.isSystem && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <div className="flex items-center space-x-2">
-                    <AlertCircle className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm text-blue-800">
-                      This is a system role. Some fields cannot be modified.
-                    </span>
-                  </div>
-                </div>
-              )}
             </TabsContent>
 
             <TabsContent value="permissions" className="space-y-4 mt-6">
@@ -1199,7 +1188,7 @@ export default function RoleManagement() {
                                 id={`edit-${permission.key}`}
                                 checked={roleForm.permissions.includes(permission.key)}
                                 onCheckedChange={() => handlePermissionToggle(permission.key)}
-                                disabled={selectedRole?.isSystem}
+                                disabled={false}
                               />
                               <div className="grid gap-1.5 leading-none">
                                 <Label
@@ -1230,7 +1219,7 @@ export default function RoleManagement() {
                   onCheckedChange={checked =>
                     setRoleForm(prev => ({ ...prev, requiresOnboarding: checked }))
                   }
-                  disabled={selectedRole?.isSystem}
+                  disabled={false}
                 />
                 <Label htmlFor="editRequiresOnboarding">Require onboarding for this role</Label>
               </div>
@@ -1247,7 +1236,7 @@ export default function RoleManagement() {
             </Button>
             <Button
               onClick={handleEditRole}
-              disabled={isSaving || selectedRole?.isSystem}
+              disabled={isSaving}
               className="starboard-button"
             >
               {isSaving ? (

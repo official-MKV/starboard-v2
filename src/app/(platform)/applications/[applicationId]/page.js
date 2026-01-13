@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -30,23 +31,50 @@ import {
 import { formatDate, formatRelativeTime } from '@/lib/utils'
 import { toast } from 'sonner'
 import { DynamicFormRenderer } from '@/components/applications/dynamic-form-renderer'
+import SubmissionsTable from '@/components/applications/submissions-table'
+import EvaluationDashboard from '@/components/applications/evaluation/evaluation-dashboard'
+
 export default function ApplicationDetailPage({ params }) {
   // Unwrap params Promise for Next.js 15+ compatibility
   const { applicationId } = use(params)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [application, setApplication] = useState(null)
   const [submissions, setSubmissions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false)
   const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('overview')
 
- 
+  // Get initial values from URL or use defaults
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview')
   const [searchTerm, setSearchTerm] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1', 10))
   const [totalPages, setTotalPages] = useState(1)
   const [totalSubmissions, setTotalSubmissions] = useState(0)
   const [itemsPerPage] = useState(10)
-  console.log(applicationId)
+
+  // Function to update URL params
+  const updateURLParams = (tab, page) => {
+    const params = new URLSearchParams()
+    if (tab) params.set('tab', tab)
+    if (page && tab === 'submissions') params.set('page', page.toString())
+    router.push(`/applications/${applicationId}?${params.toString()}`, { scroll: false })
+  }
+
+  // Handle tab change
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab)
+    updateURLParams(newTab, newTab === 'submissions' ? currentPage : null)
+  }
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage)
+    if (activeTab === 'submissions') {
+      updateURLParams(activeTab, newPage)
+    }
+  }
 
   useEffect(() => {
     const fetchApplication = async () => {
@@ -263,10 +291,12 @@ export default function ApplicationDetailPage({ params }) {
                 </Button>
               </Link>
 
-              <Button className="starboard-button" size="sm">
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </Button>
+              <Link href={`/applications/${applicationId}/settings`}>
+                <Button className="starboard-button" size="sm">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </Button>
+              </Link>
             </div>
           }
         />
@@ -332,10 +362,11 @@ export default function ApplicationDetailPage({ params }) {
           </div>
 
           {/* Main Content Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="submissions">Submissions</TabsTrigger>
+              <TabsTrigger value="evaluation">Evaluation</TabsTrigger>
               <TabsTrigger value="form">Form Fields</TabsTrigger>
               <TabsTrigger value="form-preview">Form Preview</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
@@ -512,144 +543,11 @@ export default function ApplicationDetailPage({ params }) {
             </TabsContent>
 
             <TabsContent value="submissions">
-              <Card className="starboard-card">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Submissions ({totalSubmissions || 0})</CardTitle>
-                      <CardDescription>All applications submitted for this form</CardDescription>
-                    </div>
-                    <Button onClick={fetchSubmissions} disabled={isLoadingSubmissions}>
-                      {isLoadingSubmissions ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Loading...
-                        </>
-                      ) : (
-                        'Refresh'
-                      )}
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {/* Search Input */}
-                  <div className="mb-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        placeholder="Search by email..."
-                        value={searchTerm}
-                        onChange={(e) => {
-                          setSearchTerm(e.target.value)
-                          setCurrentPage(1) // Reset to first page on search
-                        }}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-                  {isLoadingSubmissions ? (
-                    <div className="text-center py-8">
-                      <Loader2 className="h-12 w-12 text-slate-gray-300 mx-auto mb-4 animate-spin" />
-                      <p className="text-slate-gray-600">Loading submissions...</p>
-                    </div>
-                  ) : submissions.length === 0 ? (
-                    <div className="text-center py-8">
-                      <Users className="h-12 w-12 text-slate-gray-300 mx-auto mb-4" />
-                      <p className="text-slate-gray-600 mb-2">No submissions yet</p>
-                      <p className="text-sm text-slate-gray-500">
-                        Share your application form to start receiving submissions
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead className="bg-slate-gray-50 border-b">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-slate-gray-600 uppercase">
-                                Email
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-slate-gray-600 uppercase">
-                                Status
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-slate-gray-600 uppercase">
-                                Submitted
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-slate-gray-600 uppercase">
-                                Actions
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {submissions.map(submission => (
-                              <tr key={submission.id} className="hover:bg-slate-gray-50">
-                                <td className="px-4 py-3 text-sm">
-                                  {submission.applicantEmail || submission.user?.email || 'N/A'}
-                                </td>
-                                <td className="px-4 py-3 text-sm">
-                                  <Badge
-                                    variant={
-                                      submission.status === 'ACCEPTED'
-                                        ? 'success'
-                                        : submission.status === 'REJECTED'
-                                        ? 'destructive'
-                                        : 'secondary'
-                                    }
-                                  >
-                                    {submission.status}
-                                  </Badge>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-slate-gray-600">
-                                  {formatDate(submission.submittedAt)}
-                                </td>
-                                <td className="px-4 py-3 text-sm">
-                                  <Link href={`/applications/${applicationId}/submissions/${submission.id}`}>
-                                    <Button variant="outline" size="sm">
-                                      <Eye className="h-4 w-4 mr-1" />
-                                      View
-                                    </Button>
-                                  </Link>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      {submissions.length > 0 && (
-                        <div className="flex items-center justify-between pt-4 border-t">
-                          <p className="text-sm text-slate-gray-600">
-                            Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
-                            {Math.min(currentPage * itemsPerPage, totalSubmissions)} of {totalSubmissions} submission{totalSubmissions !== 1 ? 's' : ''}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                              disabled={currentPage === 1}
-                            >
-                              <ChevronLeft className="h-4 w-4" />
-                              Previous
-                            </Button>
-                            <span className="text-sm text-slate-gray-600">
-                              Page {currentPage} of {totalPages}
-                            </span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                              disabled={currentPage === totalPages}
-                            >
-                              Next
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <SubmissionsTable applicationId={applicationId} />
+            </TabsContent>
+
+            <TabsContent value="evaluation">
+              <EvaluationDashboard applicationId={applicationId} />
             </TabsContent>
 
             <TabsContent value="form">

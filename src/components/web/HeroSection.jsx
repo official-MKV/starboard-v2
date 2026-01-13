@@ -5,10 +5,7 @@ import InfiniteCarousel from './InfiniteCarousel'
 
 const HeroSection = () => {
   return (
-    <div className='w-full min-h-screen flex items-center flex-col py-16 px-4 relative'>
-        {/* Background Pattern */}
-        <div className='absolute inset-0 bg-cover bg-center bg-no-repeat opacity-30 z-0' style={{backgroundImage: 'url(/hero_pattern.png)'}}></div>
-
+    <div className='w-full min-h-screen flex items-center flex-col py-16 px-4 relative bg-cover bg-center bg-no-repeat ' style={{backgroundImage: 'url(/hero_pattern.png)'}}>
         <div className='text-center max-w-[90%] lg:max-w-[80%] mb-8 md:mb-12 mt-16 md:mt-24 relative z-10'>
             <div className="inline-block mb-4">
               <div className="bg-blue-50 border-2 border-blue-600 rounded-full px-6 py-3">

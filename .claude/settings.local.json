@@ -15,7 +15,13 @@
       "Bash(powershell:*)",
       "Bash(npm run dev:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm run db:push:*)",
+      "Bash(git checkout:*)",
+      "Bash(taskkill:*)",
+      "Bash(dir /b \"C:\\\\Users\\\\DELL\\\\makp\\\\dev\\\\starboard-v2\\\\src\\\\app\\\\\\(platform\\)\\\\applications\\\\[applicationId]\")",
+      "Bash(cat:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []
