@@ -22,7 +22,7 @@ export class EvaluationService {
       throw new Error('Evaluation steps already exist for this application');
     }
 
-    // Create both steps in a transaction
+    // Create both steps in a transaction with increased timeout
     const result = await prisma.$transaction(async (tx) => {
       // Create Step 1
       const step1 = await tx.evaluationStep.create({
@@ -63,6 +63,8 @@ export class EvaluationService {
       });
 
       return { step1, step2 };
+    }, {
+      timeout: 15000 // Increase timeout to 15 seconds for complex nested operations
     });
 
     return result;
