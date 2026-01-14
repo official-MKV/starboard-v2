@@ -21,7 +21,9 @@
       "Bash(taskkill:*)",
       "Bash(dir /b \"C:\\\\Users\\\\DELL\\\\makp\\\\dev\\\\starboard-v2\\\\src\\\\app\\\\\\(platform\\)\\\\applications\\\\[applicationId]\")",
       "Bash(cat:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

@@ -53,6 +53,34 @@ const getStatusInfo = (status) => {
   }
 }
 
+// Helper function to get field options
+const getFieldOptions = (field) => {
+  if (!field.options) return [];
+
+  // If it's already an array, return it
+  if (Array.isArray(field.options)) return field.options;
+
+  // If it's a string, try to parse it
+  if (typeof field.options === 'string') {
+    try {
+      const parsed = JSON.parse(field.options);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  // If it's an object (Prisma JsonValue), try to convert
+  if (typeof field.options === 'object') {
+    const keys = Object.keys(field.options);
+    if (keys.every(k => !isNaN(k))) {
+      return Object.values(field.options);
+    }
+  }
+
+  return [];
+};
+
 // Helper function to render field value
 const renderFieldValue = (field, value) => {
   if (!value && value !== 0 && value !== false) return 'N/A'
@@ -122,11 +150,26 @@ const renderFieldValue = (field, value) => {
         </a>
       )
 
-    case 'CHECKBOX':
-      if (Array.isArray(value)) {
-        return value.join(', ')
-      }
-      return value
+    case 'SELECT':
+    case 'RADIO': {
+      // For SELECT and RADIO, look up the label from options
+      const options = getFieldOptions(field);
+      const selectedOption = options.find(opt => opt.value === value);
+      return selectedOption ? selectedOption.label : value;
+    }
+
+    case 'CHECKBOX': {
+      // For CHECKBOX, value is an array of selected values
+      const options = getFieldOptions(field);
+      const selectedValues = Array.isArray(value) ? value : [value];
+      const labels = selectedValues
+        .map(val => {
+          const option = options.find(opt => opt.value === val);
+          return option ? option.label : val;
+        })
+        .filter(Boolean);
+      return labels.length > 0 ? labels.join(', ') : value;
+    }
 
     case 'BOOLEAN':
       return value ? 'Yes' : 'No'
