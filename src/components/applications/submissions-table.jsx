@@ -71,7 +71,7 @@ export default function SubmissionsTable({ applicationId }) {
     try {
       // Load ALL submissions (no pagination on API call, we'll paginate client-side after filtering)
       const queryParams = new URLSearchParams({
-        limit: '10000' // Get all submissions
+        limit: '20' // Get all submissions
       });
 
       const subRes = await fetch(`/api/applications/${applicationId}/submissions?${queryParams}`);
