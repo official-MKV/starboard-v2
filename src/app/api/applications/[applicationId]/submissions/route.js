@@ -24,6 +24,7 @@ export async function GET(request, { params }) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const search = searchParams.get('search')
+    const currentStep = searchParams.get('currentStep')
     const page = parseInt(searchParams.get('page') || '1', 10)
     const limit = parseInt(searchParams.get('limit') || '50', 10)
 
@@ -38,12 +39,13 @@ export async function GET(request, { params }) {
     const submissions = await applicationService.findSubmissionsByApplication(applicationId, {
       status,
       search,
+      currentStep,
       page,
       limit,
     })
 
     // Get total count for pagination
-    const totalCount = await applicationService.getSubmissionCount(applicationId, { status, search })
+    const totalCount = await applicationService.getSubmissionCount(applicationId, { status, search, currentStep })
 
     // Get evaluation data for enriching submissions
     const evaluationSteps = await prisma.evaluationStep.findMany({

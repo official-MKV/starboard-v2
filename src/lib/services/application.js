@@ -342,13 +342,14 @@ export const applicationService = {
 
   async findSubmissionsByApplication(applicationId, options = {}) {
     try {
-      const { status, page = 1, limit = 10, includeReviewed = true, search } = options
+      const { status, page = 1, limit = 10, includeReviewed = true, search, currentStep } = options
 
       // Build the where clause
       const whereClause = {
         applicationId,
         ...(status ? { status } : {}),
         ...(includeReviewed ? {} : { status: { not: 'DRAFT' } }),
+        ...(currentStep ? { currentStep: parseInt(currentStep) } : {}),
       }
 
       // Add search filter if provided
@@ -554,12 +555,13 @@ export const applicationService = {
 
   async getSubmissionCount(applicationId, options = {}) {
     try {
-      const { status, search } = options
+      const { status, search, currentStep } = options
 
       // Build the where clause
       const whereClause = {
         applicationId,
         ...(status ? { status } : {}),
+        ...(currentStep ? { currentStep: parseInt(currentStep) } : {}),
       }
 
       // Add search filter if provided

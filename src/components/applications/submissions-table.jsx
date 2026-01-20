@@ -51,7 +51,7 @@ export default function SubmissionsTable({ applicationId }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalSubmissions, setTotalSubmissions] = useState(0);
-  const [itemsPerPage] = useState(20);
+  const [itemsPerPage] = useState(50);
 
   // Check permissions
   const canAdvance = hasPermission(PERMISSIONS.EVALUATION_ADVANCE);
@@ -69,15 +69,27 @@ export default function SubmissionsTable({ applicationId }) {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Load ALL submissions (no pagination on API call, we'll paginate client-side after filtering)
+      // Build query params for server-side pagination and filtering
       const queryParams = new URLSearchParams({
-        limit: '20' // Get all submissions
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString()
       });
+
+      // Add step filter if not 'all'
+      if (filter !== 'all') {
+        const stepNumber = filter === 'step1' ? '1' : '2';
+        queryParams.set('currentStep', stepNumber);
+      }
 
       const subRes = await fetch(`/api/applications/${applicationId}/submissions?${queryParams}`);
       const subData = await subRes.json();
       if (subRes.ok) {
         setSubmissions(subData.data?.submissions || []);
+        // Update pagination state from server response
+        if (subData.data?.pagination) {
+          setTotalPages(subData.data.pagination.totalPages || 1);
+          setTotalSubmissions(subData.data.pagination.total || 0);
+        }
       }
 
       // Load form fields
@@ -334,37 +346,8 @@ export default function SubmissionsTable({ applicationId }) {
   };
 
   const getFilteredSubmissions = () => {
-    if (!Array.isArray(submissions)) {
-      return [];
-    }
-
-    // First filter by step
-    const filtered = submissions.filter(sub => {
-      const currentStep = sub.currentStep || 1;
-
-      switch (filter) {
-        case 'step1':
-          return currentStep === 1;
-        case 'step2':
-          return currentStep === 2;
-        case 'all':
-          return true;
-        default:
-          return currentStep === 1; // Default to step 1
-      }
-    });
-
-    // Update total pages based on filtered results
-    const total = Math.ceil(filtered.length / itemsPerPage);
-    if (total !== totalPages) {
-      setTotalPages(total);
-      setTotalSubmissions(filtered.length);
-    }
-
-    // Then paginate
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return filtered.slice(startIndex, endIndex);
+    // Submissions are already filtered and paginated server-side
+    return Array.isArray(submissions) ? submissions : [];
   };
 
   const pinnedFieldObjects = pinnedFields

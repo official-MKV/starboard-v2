@@ -255,14 +255,21 @@ export default function SubmissionDetailPage({ params }) {
 
   const submission = submissionData?.data?.submission
 
-  // Fetch all submission IDs for navigation
+  // Fetch all submission IDs for navigation (respecting the filter from the table)
   useEffect(() => {
     const fetchSubmissionIds = async () => {
       try {
-        // Fetch ALL submission IDs with a large limit
+        // Build query params to match the filter from the submissions table
         const queryParams = new URLSearchParams({
-          limit: '10000' // Get all submissions
+          limit: '10000' // Get all submissions for this filter
         })
+
+        // Apply the same filter as the submissions table
+        if (returnFilter && returnFilter !== 'all') {
+          const stepNumber = returnFilter === 'step1' ? '1' : '2'
+          queryParams.set('currentStep', stepNumber)
+        }
+
         const response = await fetch(`/api/applications/${applicationId}/submissions?${queryParams}`)
         if (!response.ok) return
         const data = await response.json()
@@ -275,7 +282,7 @@ export default function SubmissionDetailPage({ params }) {
     }
 
     fetchSubmissionIds()
-  }, [applicationId, submissionId])
+  }, [applicationId, submissionId, returnFilter])
 
   // Check evaluation status and load scores
   useEffect(() => {
@@ -332,13 +339,19 @@ export default function SubmissionDetailPage({ params }) {
   // Navigation handlers
   const goToPrevious = () => {
     if (currentIndex > 0 && submissionIds[currentIndex - 1]) {
-      router.push(`/applications/${applicationId}/submissions/${submissionIds[currentIndex - 1]}`)
+      const params = new URLSearchParams()
+      params.set('returnTab', returnTab)
+      if (returnFilter) params.set('returnFilter', returnFilter)
+      router.push(`/applications/${applicationId}/submissions/${submissionIds[currentIndex - 1]}?${params.toString()}`)
     }
   }
 
   const goToNext = () => {
     if (currentIndex < submissionIds.length - 1 && submissionIds[currentIndex + 1]) {
-      router.push(`/applications/${applicationId}/submissions/${submissionIds[currentIndex + 1]}`)
+      const params = new URLSearchParams()
+      params.set('returnTab', returnTab)
+      if (returnFilter) params.set('returnFilter', returnFilter)
+      router.push(`/applications/${applicationId}/submissions/${submissionIds[currentIndex + 1]}?${params.toString()}`)
     }
   }
 
