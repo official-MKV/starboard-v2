@@ -24,6 +24,8 @@ import {
   Eye,
   Download,
   TrendingUp,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SubmissionsTableConfig from './submissions-table-config';
@@ -45,19 +47,34 @@ export default function SubmissionsTable({ applicationId }) {
   const [cutoffScores, setCutoffScores] = useState({ step1: 0, step2: 0 });
   const [evalSettings, setEvalSettings] = useState({ requiredEvaluatorPercentage: 75, minScore: 1, maxScore: 10 });
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalSubmissions, setTotalSubmissions] = useState(0);
+  const [itemsPerPage] = useState(20);
+
   // Check permissions
   const canAdvance = hasPermission(PERMISSIONS.EVALUATION_ADVANCE);
   const canAdmit = hasPermission(PERMISSIONS.EVALUATION_ADMIT);
 
   useEffect(() => {
     loadData();
-  }, [applicationId]);
+  }, [applicationId, currentPage, filter]);
+
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Load submissions
-      const subRes = await fetch(`/api/applications/${applicationId}/submissions`);
+      // Load ALL submissions (no pagination on API call, we'll paginate client-side after filtering)
+      const queryParams = new URLSearchParams({
+        limit: '10000' // Get all submissions
+      });
+
+      const subRes = await fetch(`/api/applications/${applicationId}/submissions?${queryParams}`);
       const subData = await subRes.json();
       if (subRes.ok) {
         setSubmissions(subData.data?.submissions || []);
@@ -321,7 +338,8 @@ export default function SubmissionsTable({ applicationId }) {
       return [];
     }
 
-    return submissions.filter(sub => {
+    // First filter by step
+    const filtered = submissions.filter(sub => {
       const currentStep = sub.currentStep || 1;
 
       switch (filter) {
@@ -335,6 +353,18 @@ export default function SubmissionsTable({ applicationId }) {
           return currentStep === 1; // Default to step 1
       }
     });
+
+    // Update total pages based on filtered results
+    const total = Math.ceil(filtered.length / itemsPerPage);
+    if (total !== totalPages) {
+      setTotalPages(total);
+      setTotalSubmissions(filtered.length);
+    }
+
+    // Then paginate
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filtered.slice(startIndex, endIndex);
   };
 
   const pinnedFieldObjects = pinnedFields
@@ -740,6 +770,38 @@ export default function SubmissionsTable({ applicationId }) {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="border-t px-4 py-3 flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalSubmissions)} of {totalSubmissions} submissions
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <div className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Config Modal */}

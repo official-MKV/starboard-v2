@@ -259,7 +259,11 @@ export default function SubmissionDetailPage({ params }) {
   useEffect(() => {
     const fetchSubmissionIds = async () => {
       try {
-        const response = await fetch(`/api/applications/${applicationId}/submissions`)
+        // Fetch ALL submission IDs with a large limit
+        const queryParams = new URLSearchParams({
+          limit: '10000' // Get all submissions
+        })
+        const response = await fetch(`/api/applications/${applicationId}/submissions?${queryParams}`)
         if (!response.ok) return
         const data = await response.json()
         const ids = data.data?.submissions?.map(s => s.id) || []
