@@ -260,9 +260,7 @@ export default function SubmissionDetailPage({ params }) {
     const fetchSubmissionIds = async () => {
       try {
         // Build query params to match the filter from the submissions table
-        const queryParams = new URLSearchParams({
-          limit: '10000' // Get all submissions for this filter
-        })
+        const queryParams = new URLSearchParams()
 
         // Apply the same filter as the submissions table
         if (returnFilter && returnFilter !== 'all') {
@@ -270,10 +268,29 @@ export default function SubmissionDetailPage({ params }) {
           queryParams.set('currentStep', stepNumber)
         }
 
-        const response = await fetch(`/api/applications/${applicationId}/submissions?${queryParams}`)
-        if (!response.ok) return
+        // Use the dedicated IDs endpoint for fast navigation
+        const response = await fetch(`/api/applications/${applicationId}/submissions/ids?${queryParams}`)
+        if (!response.ok) {
+          console.error('Failed to fetch submission IDs:', response.status)
+          return
+        }
+
         const data = await response.json()
-        const ids = data.data?.submissions?.map(s => s.id) || []
+        let ids = data.data?.ids || []
+
+        console.log('Fetched submission IDs:', ids.length, 'Current ID:', submissionId)
+
+        // If the current submission is not in the filtered list, fetch all submissions
+        if (ids.length > 0 && !ids.includes(submissionId)) {
+          console.log('Current submission not found in filtered list, fetching all submissions')
+          const allResponse = await fetch(`/api/applications/${applicationId}/submissions/ids`)
+          if (allResponse.ok) {
+            const allData = await allResponse.json()
+            ids = allData.data?.ids || []
+            console.log('Fetched all submission IDs:', ids.length)
+          }
+        }
+
         setSubmissionIds(ids)
         setCurrentIndex(ids.indexOf(submissionId))
       } catch (error) {
@@ -281,7 +298,9 @@ export default function SubmissionDetailPage({ params }) {
       }
     }
 
-    fetchSubmissionIds()
+    if (applicationId && submissionId) {
+      fetchSubmissionIds()
+    }
   }, [applicationId, submissionId, returnFilter])
 
   // Check evaluation status and load scores
